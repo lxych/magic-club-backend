@@ -134,27 +134,31 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
 
     @Override
     @Transactional
-    public boolean likePost(Long postId) {
-        postMapper.incrementLikeCount(postId);
+    public boolean likePost(Long postId, Boolean isLike) {
+        if (isLike) {
+            postMapper.incrementLikeCount(postId);
+        } else {
+            postMapper.decrementLikeCount(postId);
+        }
         return true;
     }
 
     @Override
     @Transactional
     public boolean toggleTop(Long postId, Boolean isTop) {
-        Post post = new Post();
-        post.setId(postId);
-        post.setIsTop(isTop ? 1 : 0);
-        return postMapper.updateById(post) > 0;
+        return lambdaUpdate()
+            .set(Post::getIsTop, isTop ? 1 : 0)
+            .eq(Post::getId, postId)
+            .update();
     }
 
     @Override
     @Transactional
     public boolean toggleEssence(Long postId, Boolean isEssence) {
-        Post post = new Post();
-        post.setId(postId);
-        post.setIsEssence(isEssence ? 1 : 0);
-        return postMapper.updateById(post) > 0;
+        return lambdaUpdate()
+            .set(Post::getIsEssence, isEssence ? 1 : 0)
+            .eq(Post::getId, postId)
+            .update();
     }
 
     @Override

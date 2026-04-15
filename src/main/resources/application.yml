@@ -32,6 +32,8 @@ spring:
     time-zone: Asia/Shanghai
     serialization:
       write-dates-as-timestamps: false
+    generator:
+      write-numbers-as-strings: true
 
 # MyBatis Plus
 mybatis-plus:

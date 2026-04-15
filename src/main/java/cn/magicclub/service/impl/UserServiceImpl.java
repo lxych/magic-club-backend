@@ -4,6 +4,7 @@ import cn.magicclub.common.JwtUtil;
 import cn.magicclub.entity.User;
 import cn.magicclub.mapper.UserMapper;
 import cn.magicclub.service.UserService;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -149,5 +150,61 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setAvatar(avatarUrl);
         userMapper.updateById(user);
         return avatarUrl;
+    }
+
+    @Override
+    public IPage<User> getGraduatedUsers(IPage<User> page, Integer graduationYear) {
+        return userMapper.selectGraduatedUsers(page, graduationYear);
+    }
+
+    @Override
+    @Transactional
+    public boolean markAsGraduated(Long userId, Integer graduationYear, String currentStatus) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        user.setIsGraduated(1);
+        user.setGraduationYear(graduationYear);
+        user.setRole("ALUMNI"); // 标记为校友角色
+        if (StringUtils.hasText(currentStatus)) {
+            // 可以添加 currentStatus 字段到 User 实体
+        }
+        
+        return userMapper.updateById(user) > 0;
+    }
+
+    @Override
+    @Transactional
+    public boolean updateGraduatedInfo(Long userId, Integer graduationYear, String currentStatus) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        if (!user.getIsGraduated().equals(1)) {
+            throw new RuntimeException("该用户不是毕业成员");
+        }
+        
+        user.setGraduationYear(graduationYear);
+        // 可以添加 currentStatus 字段到 User 实体
+        
+        return userMapper.updateById(user) > 0;
+    }
+
+    @Override
+    @Transactional
+    public boolean cancelGraduated(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        user.setIsGraduated(0);
+        user.setGraduationYear(null);
+        user.setRole("MEMBER"); // 恢复为普通成员
+        
+        return userMapper.updateById(user) > 0;
     }
 }

@@ -28,6 +28,12 @@ public interface PostMapper extends BaseMapper<Post> {
     void incrementLikeCount(@Param("id") Long id);
 
     /**
+     * 减少点赞数
+     */
+    @Update("UPDATE mc_post SET like_count = CASE WHEN like_count > 0 THEN like_count - 1 ELSE 0 END WHERE id = #{id}")
+    void decrementLikeCount(@Param("id") Long id);
+
+    /**
      * 增加回复数
      */
     @Update("UPDATE mc_post SET reply_count = reply_count + 1 WHERE id = #{id}")

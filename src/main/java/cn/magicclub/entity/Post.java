@@ -1,6 +1,7 @@
 package cn.magicclub.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -60,12 +61,14 @@ public class Post implements Serializable {
      * 是否置顶: 0-否 1-是
      */
     @TableField("is_top")
+    @JsonProperty("isTop")
     private Integer isTop;
 
     /**
      * 是否精华: 0-否 1-是
      */
     @TableField("is_essence")
+    @JsonProperty("isEssence")
     private Integer isEssence;
 
     /**

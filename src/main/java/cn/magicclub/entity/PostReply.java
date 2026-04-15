@@ -42,6 +42,11 @@ public class PostReply implements Serializable {
     private Long parentId;
 
     /**
+     * 被回复用户ID(用于显示"回复 xxx")
+     */
+    private Long targetUserId;
+
+    /**
      * 点赞数
      */
     private Integer likeCount;
@@ -72,4 +77,10 @@ public class PostReply implements Serializable {
      */
     @TableField(exist = false)
     private String authorAvatar;
+
+    /**
+     * 被回复用户昵称
+     */
+    @TableField(exist = false)
+    private String targetUserName;
 }

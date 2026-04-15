@@ -1,6 +1,7 @@
 package cn.magicclub.service;
 
 import cn.magicclub.entity.User;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
@@ -46,4 +47,24 @@ public interface UserService extends IService<User>, UserDetailsService {
      * 上传头像
      */
     String uploadAvatar(Long userId, String avatarUrl);
+
+    /**
+     * 获取毕业成员列表
+     */
+    IPage<User> getGraduatedUsers(IPage<User> page, Integer graduationYear);
+
+    /**
+     * 标记用户为毕业
+     */
+    boolean markAsGraduated(Long userId, Integer graduationYear, String currentStatus);
+
+    /**
+     * 更新毕业成员信息
+     */
+    boolean updateGraduatedInfo(Long userId, Integer graduationYear, String currentStatus);
+
+    /**
+     * 取消毕业标记
+     */
+    boolean cancelGraduated(Long userId);
 }

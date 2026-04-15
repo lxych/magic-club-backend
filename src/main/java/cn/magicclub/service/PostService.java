@@ -43,9 +43,9 @@ public interface PostService extends IService<Post> {
     void incrementViewCount(Long postId);
 
     /**
-     * 点赞帖子
+     * 点赞/取消点赞帖子
      */
-    boolean likePost(Long postId);
+    boolean likePost(Long postId, Boolean isLike);
 
     /**
      * 置顶/取消置顶

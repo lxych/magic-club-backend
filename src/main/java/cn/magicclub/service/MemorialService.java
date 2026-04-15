@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 纪念墙Service接口
@@ -15,42 +16,42 @@ import java.util.Map;
 public interface MemorialService extends IService<Memorial> {
 
     /**
-     * 创建纪念墙记录
+     * 创建历史事件
      */
-    Memorial createMemorial(Memorial memorial);
+    Memorial createMemorial(Memorial memorial, Long createBy);
 
     /**
-     * 更新纪念墙记录
+     * 更新历史事件
      */
     boolean updateMemorial(Memorial memorial);
 
     /**
-     * 删除纪念墙记录
+     * 删除历史事件（仅管理员）
      */
-    boolean deleteMemorial(Long id);
+    boolean deleteMemorial(Long id, Long userId);
 
     /**
-     * 获取纪念墙详情
+     * 获取历史事件详情
      */
     Memorial getMemorialDetail(Long id);
 
     /**
-     * 按年份查询纪念墙数据
+     * 按年份查询历史事件
      */
     List<Memorial> getMemorialsByYear(Integer year);
 
     /**
-     * 获取所有毕业年份列表
+     * 获取所有年份列表
      */
-    List<Integer> getAllGraduationYears();
+    List<Integer> getAllYears();
 
     /**
-     * 获取按年份分组的纪念墙数据
+     * 获取按年份分组的历史事件数据
      */
     Map<Integer, List<Memorial>> getMemorialsGroupByYear();
 
     /**
-     * 将用户添加到纪念墙（毕业）
+     * 获取多个年份的历史事件
      */
-    Memorial addToMemorial(Long userId, Integer graduationYear, String message);
+    Map<Integer, List<Memorial>> getMemorialsByYears(Set<Integer> years);
 }

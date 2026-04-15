@@ -131,7 +131,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         }
 
         // 删除物理文件
-        File file = new File(resourceFile.getFilePath().replace("/", File.separator));
+        Path path = Paths.get(resourceFile.getFilePath());
+        File file = path.toFile();
         if (file.exists()) {
             file.delete();
         }
@@ -199,17 +200,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     public void downloadFile(Long fileId, HttpServletResponse response) {
         ResourceFile resourceFile = resourceFileMapper.selectById(fileId);
         if (resourceFile == null || resourceFile.getDeleted() == 1) {
-            System.out.println("[DEBUG] 文件不存在或已删除: id=" + fileId);
             throw new RuntimeException("文件不存在");
         }
 
-        // 转换路径分隔符
-        String filePath = resourceFile.getFilePath().replace("/", File.separator);
-        File file = new File(filePath);
-        
-        System.out.println("[DEBUG] 文件路径: " + filePath);
-        System.out.println("[DEBUG] 绝对路径: " + file.getAbsolutePath());
-        System.out.println("[DEBUG] 文件是否存在: " + file.exists());
+        // 使用 Paths 处理路径
+        Path path = Paths.get(resourceFile.getFilePath());
+        File file = path.toFile();
         
         if (!file.exists()) {
             throw new RuntimeException("文件已被删除");

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -28,4 +29,10 @@ public interface PostReplyMapper extends BaseMapper<PostReply> {
      */
     @Select("SELECT * FROM mc_post_reply WHERE parent_id = #{parentId} AND deleted = 0 ORDER BY create_time ASC")
     List<PostReply> selectByParentId(@Param("parentId") Long parentId);
+
+    /**
+     * 根据父ID删除回复（逻辑删除）
+     */
+    @Update("UPDATE mc_post_reply SET deleted = 1 WHERE parent_id = #{parentId}")
+    void deleteByParentId(@Param("parentId") Long parentId);
 }

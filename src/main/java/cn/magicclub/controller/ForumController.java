@@ -6,6 +6,7 @@ import cn.magicclub.entity.Post;
 import cn.magicclub.entity.PostReply;
 import cn.magicclub.service.PostReplyService;
 import cn.magicclub.service.PostService;
+import cn.magicclub.service.SystemConfigService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +30,7 @@ public class ForumController {
     private final PostService postService;
     private final PostReplyService postReplyService;
     private final JwtUtil jwtUtil;
+    private final SystemConfigService systemConfigService;
 
     /**
      * 创建帖子
@@ -36,6 +38,11 @@ public class ForumController {
     @PostMapping("/post")
     public Result<Post> createPost(@RequestHeader("Authorization") String token,
                                    @RequestBody Post post) {
+        // 检查全员禁言
+        if (systemConfigService.isGlobalMute()) {
+            return Result.error(403, "系统已开启全员禁言，暂时无法发帖");
+        }
+        
         Long userId = getUserIdFromToken(token);
         if (userId == null) {
             return Result.error(401, "请先登录");
@@ -114,12 +121,13 @@ public class ForumController {
     }
 
     /**
-     * 点赞帖子
+     * 点赞/取消点赞帖子
      */
     @PostMapping("/post/{id}/like")
-    public Result<Boolean> likePost(@PathVariable Long id) {
-        boolean success = postService.likePost(id);
-        return Result.ok("点赞成功", success);
+    public Result<Boolean> likePost(@PathVariable Long id,
+                                    @RequestParam(defaultValue = "true") Boolean isLike) {
+        boolean success = postService.likePost(id, isLike);
+        return Result.ok(isLike ? "点赞成功" : "取消点赞", success);
     }
 
     /**
@@ -128,8 +136,12 @@ public class ForumController {
     @PostMapping("/post/{id}/top")
     public Result<Boolean> toggleTop(@RequestHeader("Authorization") String token,
                                      @PathVariable Long id,
-                                     @RequestParam Boolean isTop) {
-        // 这里可以添加管理员权限检查
+                                     @RequestParam("isTop") Boolean isTop) {
+        // 检查管理员权限
+        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
+        if (!"ADMIN".equals(role)) {
+            return Result.error(403, "仅管理员可置顶帖子");
+        }
         boolean success = postService.toggleTop(id, isTop);
         return Result.ok(isTop ? "置顶成功" : "取消置顶成功", success);
     }
@@ -140,7 +152,12 @@ public class ForumController {
     @PostMapping("/post/{id}/essence")
     public Result<Boolean> toggleEssence(@RequestHeader("Authorization") String token,
                                          @PathVariable Long id,
-                                         @RequestParam Boolean isEssence) {
+                                         @RequestParam("isEssence") Boolean isEssence) {
+        // 检查管理员权限
+        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
+        if (!"ADMIN".equals(role)) {
+            return Result.error(403, "仅管理员可设置精华");
+        }
         boolean success = postService.toggleEssence(id, isEssence);
         return Result.ok(isEssence ? "设为精华成功" : "取消精华成功", success);
     }
@@ -166,6 +183,11 @@ public class ForumController {
     public Result<PostReply> createReply(@RequestHeader("Authorization") String token,
                                          @PathVariable Long postId,
                                          @RequestBody PostReply reply) {
+        // 检查全员禁言
+        if (systemConfigService.isGlobalMute()) {
+            return Result.error(403, "系统已开启全员禁言，暂时无法评论");
+        }
+        
         Long userId = getUserIdFromToken(token);
         if (userId == null) {
             return Result.error(401, "请先登录");

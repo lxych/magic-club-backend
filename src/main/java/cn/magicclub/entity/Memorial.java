@@ -4,10 +4,11 @@ import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 纪念墙实体类
+ * 纪念墙-历史事件实体类
  *
  * @author demo
  * @since 2025-04-13
@@ -22,35 +23,40 @@ public class Memorial implements Serializable {
     private Long id;
 
     /**
-     * 用户ID
+     * 事件标题
      */
-    private Long userId;
+    private String title;
 
     /**
-     * 毕业年份
+     * 事件内容/介绍
      */
-    private Integer graduationYear;
+    private String content;
 
     /**
-     * 毕业寄语
+     * 事件日期
      */
-    private String message;
+    private LocalDate eventDate;
 
     /**
-     * 社团贡献/成就
+     * 年份（用于分组展示）
      */
-    private String achievements;
+    private Integer year;
 
     /**
-     * 当前状态(去向)
+     * 图片URL，多个用逗号分隔
      */
-    private String currentStatus;
+    private String imageUrls;
 
     /**
-     * 联系方式是否公开: 0-否 1-是
+     * 创建者ID
      */
-    @TableField("contact_public")
-    private Integer contactPublic;
+    private Long createBy;
+
+    /**
+     * 创建者名称（非数据库字段）
+     */
+    @TableField(exist = false)
+    private String createByName;
 
     /**
      * 展示顺序
@@ -75,42 +81,4 @@ public class Memorial implements Serializable {
     @TableLogic
     @TableField(fill = FieldFill.INSERT)
     private Integer deleted;
-
-    // ==================== 非数据库字段 ====================
-
-    /**
-     * 用户姓名
-     */
-    @TableField(exist = false)
-    private String userName;
-
-    /**
-     * 用户头像
-     */
-    @TableField(exist = false)
-    private String userAvatar;
-
-    /**
-     * 所属部门
-     */
-    @TableField(exist = false)
-    private String department;
-
-    /**
-     * 专业
-     */
-    @TableField(exist = false)
-    private String major;
-
-    /**
-     * 联系电话
-     */
-    @TableField(exist = false)
-    private String phone;
-
-    /**
-     * 邮箱
-     */
-    @TableField(exist = false)
-    private String email;
 }

@@ -108,6 +108,12 @@ public class User implements Serializable {
     private Integer isGraduated;
 
     /**
+     * 是否被强制下线: 0-否 1-是
+     */
+    @TableField("forced_logout")
+    private Integer forcedLogout;
+
+    /**
      * 创建时间
      */
     @TableField(fill = FieldFill.INSERT)
@@ -145,4 +151,10 @@ public class User implements Serializable {
      */
     @TableField(exist = false)
     private String statusName;
+    
+    /**
+     * 邀请码（注册时使用，不存入数据库）
+     */
+    @TableField(exist = false)
+    private String inviteCode;
 }

@@ -27,13 +27,19 @@ public class ResourceController {
     private final JwtUtil jwtUtil;
 
     /**
-     * 上传文件
+     * 上传文件 (仅管理员)
      */
     @PostMapping("/upload")
     public Result<ResourceFile> uploadFile(@RequestHeader("Authorization") String token,
                                            @RequestParam("file") MultipartFile file,
                                            @RequestParam(required = false) String description,
                                            @RequestParam(required = false) String category) {
+        // 验证管理员权限
+        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
+        if (!"ADMIN".equals(role)) {
+            return Result.error(403, "仅管理员可上传资源");
+        }
+        
         Long userId = getUserIdFromToken(token);
         if (userId == null) {
             return Result.error(401, "请先登录");

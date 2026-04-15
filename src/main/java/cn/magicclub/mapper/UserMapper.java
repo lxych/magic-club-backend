@@ -2,6 +2,7 @@ package cn.magicclub.mapper;
 
 import cn.magicclub.entity.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -33,4 +34,12 @@ public interface UserMapper extends BaseMapper<User> {
      */
     @Update("UPDATE mc_user SET password = #{password} WHERE username = #{username}")
     void updatePasswordByUsername(@Param("username") String username, @Param("password") String password);
+
+    /**
+     * 查询毕业成员列表
+     */
+    @Select("<script>SELECT * FROM mc_user WHERE is_graduated = 1 AND deleted = 0 " +
+            "<if test='graduationYear != null'>AND graduation_year = #{graduationYear}</if> " +
+            "ORDER BY graduation_year DESC, id DESC</script>")
+    IPage<User> selectGraduatedUsers(IPage<User> page, @Param("graduationYear") Integer graduationYear);
 }

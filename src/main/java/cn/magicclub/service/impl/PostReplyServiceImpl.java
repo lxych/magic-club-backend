@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -67,6 +68,12 @@ public class PostReplyServiceImpl extends ServiceImpl<PostReplyMapper, PostReply
             throw new RuntimeException("没有权限删除该回复");
         }
 
+        // 如果是一级评论（parentId 为 null），连带删除所有二级评论
+        if (reply.getParentId() == null) {
+            // 删除该评论下的所有二级评论
+            postReplyMapper.deleteByParentId(replyId);
+        }
+
         return postReplyMapper.deleteById(replyId) > 0;
     }
 
@@ -100,11 +107,18 @@ public class PostReplyServiceImpl extends ServiceImpl<PostReplyMapper, PostReply
             return;
         }
 
-        // 获取所有用户ID
+        // 获取所有用户ID（包括回复者和被回复者）
         List<Long> userIds = replies.stream()
                 .map(PostReply::getUserId)
-                .distinct()
                 .collect(Collectors.toList());
+        
+        // 添加被回复用户ID
+        replies.stream()
+                .map(PostReply::getTargetUserId)
+                .filter(Objects::nonNull)
+                .forEach(userIds::add);
+        
+        userIds = userIds.stream().distinct().collect(Collectors.toList());
 
         // 批量查询用户信息
         Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
@@ -116,6 +130,14 @@ public class PostReplyServiceImpl extends ServiceImpl<PostReplyMapper, PostReply
             if (user != null) {
                 reply.setAuthorName(user.getRealName() != null ? user.getRealName() : user.getUsername());
                 reply.setAuthorAvatar(user.getAvatar());
+            }
+            
+            // 填充被回复用户名称
+            if (reply.getTargetUserId() != null) {
+                User targetUser = userMap.get(reply.getTargetUserId());
+                if (targetUser != null) {
+                    reply.setTargetUserName(targetUser.getRealName() != null ? targetUser.getRealName() : targetUser.getUsername());
+                }
             }
         }
     }
