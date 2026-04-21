@@ -1,2 +1,13 @@
-# 项目排除路径
-/target/
+# IDEA
+.idea/
+*.iml
+
+# 编译文件
+target/
+out/
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
