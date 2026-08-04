@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 资源Controller
@@ -30,10 +32,11 @@ public class ResourceController {
     public Result<ResourceFile> uploadFile(@RequestHeader("Authorization") String token,
                                            @RequestParam("file") MultipartFile file,
                                            @RequestParam(required = false) String description,
-                                           @RequestParam(required = false) String category) {
+                                           @RequestParam(required = false) String category,
+                                           @RequestParam(required = false, defaultValue = "1") Integer allowDownload) {
         Long userId = getUserIdFromToken(token);
         if (userId == null) return Result.error(401, "请先登录");
-        ResourceFile resourceFile = resourceFileService.uploadFile(file, userId, description, category);
+        ResourceFile resourceFile = resourceFileService.uploadFile(file, userId, description, category, allowDownload);
         return Result.ok("上传成功，等待管理员审批", resourceFile);
     }
 
@@ -79,6 +82,18 @@ public class ResourceController {
         if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
         IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
         return Result.ok(resourceFileService.getResourcesByStatus(page, status));
+    }
+
+    /** 论坛图片上传 */
+    @PostMapping("/forum-upload")
+    public Result<Map<String,String>> forumImageUpload(@RequestHeader("Authorization") String token,
+                                                        @RequestParam("file") MultipartFile file) {
+        Long userId = getUserIdFromToken(token);
+        if (userId == null) return Result.error(401, "请先登录");
+        ResourceFile rf = resourceFileService.uploadFile(file, userId, "论坛图片", "GENERAL", 0);
+        Map<String,String> map = new HashMap<>();
+        map.put("fileUrl", rf.getFileUrl());
+        return Result.ok("上传成功", map);
     }
 
     /** 资源详情 */

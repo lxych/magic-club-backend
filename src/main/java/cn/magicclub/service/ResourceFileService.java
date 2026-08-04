@@ -18,7 +18,7 @@ public interface ResourceFileService extends IService<ResourceFile> {
     /**
      * 上传文件
      */
-    ResourceFile uploadFile(MultipartFile file, Long userId, String description, String category);
+    ResourceFile uploadFile(MultipartFile file, Long userId, String description, String category, Integer allowDownload);
 
     /**
      * 删除文件

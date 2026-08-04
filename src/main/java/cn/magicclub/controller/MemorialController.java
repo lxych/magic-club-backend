@@ -132,7 +132,7 @@ public class MemorialController {
         
         try {
             List<String> urls = files.stream()
-                    .map(file -> resourceFileService.uploadFile(file, userId, "纪念墙附件", "memorial"))
+                    .map(file -> resourceFileService.uploadFile(file, userId, "纪念墙附件", "memorial", 1))
                     .map(ResourceFile::getId)
                     .map(id -> baseUrl + "/api/resource/" + id + "/download")
                     .collect(Collectors.toList());

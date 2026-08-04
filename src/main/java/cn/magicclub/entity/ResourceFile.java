@@ -111,6 +111,11 @@ public class ResourceFile implements Serializable {
      */
     private Long auditorId;
 
+    /**
+     * 是否允许下载: 0-仅查看 1-可下载
+     */
+    private Integer allowDownload;
+
     // ==================== 非数据库字段 ====================
 
     /**

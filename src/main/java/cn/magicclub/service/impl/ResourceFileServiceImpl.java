@@ -58,7 +58,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     @Transactional
-    public ResourceFile uploadFile(MultipartFile file, Long userId, String description, String category) {
+    public ResourceFile uploadFile(MultipartFile file, Long userId, String description, String category, Integer allowDownload) {
         if (file == null || file.isEmpty()) {
             throw new RuntimeException("文件不能为空");
         }
@@ -110,6 +110,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         resourceFile.setCategory(category);
         resourceFile.setIsPublic(1);
         resourceFile.setStatus(0); // 默认待审批
+        resourceFile.setAllowDownload(allowDownload != null ? allowDownload : 1);
 
         resourceFileMapper.insert(resourceFile);
 
@@ -201,6 +202,11 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         ResourceFile resourceFile = resourceFileMapper.selectById(fileId);
         if (resourceFile == null || resourceFile.getDeleted() == 1) {
             throw new RuntimeException("文件不存在");
+        }
+
+        // 检查是否允许下载
+        if (resourceFile.getAllowDownload() != null && resourceFile.getAllowDownload() == 0) {
+            throw new RuntimeException("该资源不允许下载，仅支持在线查看");
         }
 
         // 使用 Paths 处理路径
