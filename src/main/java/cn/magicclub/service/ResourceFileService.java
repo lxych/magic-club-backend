@@ -51,6 +51,26 @@ public interface ResourceFileService extends IService<ResourceFile> {
     boolean auditResource(Long fileId, Integer status);
 
     /**
+     * 审核资源（记录审批人）
+     */
+    boolean auditResource(Long fileId, Integer status, Long auditorId);
+
+    /**
+     * 预览文件（inline）
+     */
+    void previewFile(Long fileId, HttpServletResponse response);
+
+    /**
+     * 按状态查资源列表（管理员）
+     */
+    IPage<ResourceFile> getResourcesByStatus(IPage<ResourceFile> page, Integer status);
+
+    /**
+     * 取得待审批资源列表
+     */
+    IPage<ResourceFile> getPendingResources(IPage<ResourceFile> page);
+
+    /**
      * 增加下载次数
      */
     void incrementDownloadCount(Long fileId);

@@ -109,7 +109,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         resourceFile.setDownloadCount(0);
         resourceFile.setCategory(category);
         resourceFile.setIsPublic(1);
-        resourceFile.setStatus(1); // 默认已通过
+        resourceFile.setStatus(0); // 默认待审批
 
         resourceFileMapper.insert(resourceFile);
 
@@ -247,15 +247,76 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     @Transactional
     public boolean auditResource(Long fileId, Integer status) {
+        return auditResource(fileId, status, null);
+    }
+
+    @Override
+    @Transactional
+    public boolean auditResource(Long fileId, Integer status, Long auditorId) {
         ResourceFile resourceFile = new ResourceFile();
         resourceFile.setId(fileId);
         resourceFile.setStatus(status);
+        if (auditorId != null) {
+            resourceFile.setAuditorId(auditorId);
+        }
         return resourceFileMapper.updateById(resourceFile) > 0;
     }
 
     @Override
     public void incrementDownloadCount(Long fileId) {
         resourceFileMapper.incrementDownloadCount(fileId);
+    }
+
+    @Override
+    public void previewFile(Long fileId, HttpServletResponse response) {
+        ResourceFile resourceFile = resourceFileMapper.selectById(fileId);
+        if (resourceFile == null || resourceFile.getDeleted() == 1) {
+            throw new RuntimeException("文件不存在");
+        }
+
+        Path path = Paths.get(resourceFile.getFilePath());
+        File file = path.toFile();
+        if (!file.exists()) {
+            throw new RuntimeException("文件已被删除");
+        }
+
+        response.setContentType(resourceFile.getMimeType() != null ? resourceFile.getMimeType() : "application/octet-stream");
+        response.setHeader("Content-Disposition", "inline; filename=" + URLEncoder.encode(resourceFile.getOriginalName(), StandardCharsets.UTF_8));
+        response.setContentLengthLong(resourceFile.getFileSize());
+
+        try (FileInputStream fis = new FileInputStream(file);
+             OutputStream os = response.getOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = fis.read(buffer)) != -1) {
+                os.write(buffer, 0, len);
+            }
+            os.flush();
+        } catch (Exception e) {
+            throw new RuntimeException("文件预览失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public IPage<ResourceFile> getResourcesByStatus(IPage<ResourceFile> page, Integer status) {
+        LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ResourceFile::getStatus, status);
+        wrapper.eq(ResourceFile::getDeleted, 0);
+        wrapper.orderByDesc(ResourceFile::getCreateTime);
+        IPage<ResourceFile> result = resourceFileMapper.selectPage(page, wrapper);
+        fillResourceRelatedData(result.getRecords());
+        return result;
+    }
+
+    @Override
+    public IPage<ResourceFile> getPendingResources(IPage<ResourceFile> page) {
+        LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ResourceFile::getStatus, 0);
+        wrapper.eq(ResourceFile::getDeleted, 0);
+        wrapper.orderByDesc(ResourceFile::getCreateTime);
+        IPage<ResourceFile> result = resourceFileMapper.selectPage(page, wrapper);
+        fillResourceRelatedData(result.getRecords());
+        return result;
     }
 
     /**
@@ -276,11 +337,27 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, u -> u, (k1, k2) -> k1));
 
+        // 收集审批人ID
+        List<Long> auditorIds = resources.stream()
+                .map(ResourceFile::getAuditorId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, User> auditorMap = auditorIds.isEmpty() ? Map.of() :
+                userMapper.selectBatchIds(auditorIds).stream()
+                        .collect(Collectors.toMap(User::getId, u -> u, (k1, k2) -> k1));
+
         // 填充数据
         for (ResourceFile resource : resources) {
             User user = userMap.get(resource.getUserId());
             if (user != null) {
                 resource.setUploaderName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+            }
+            if (resource.getAuditorId() != null) {
+                User auditor = auditorMap.get(resource.getAuditorId());
+                if (auditor != null) {
+                    resource.setAuditorName(auditor.getRealName() != null ? auditor.getRealName() : auditor.getUsername());
+                }
             }
             resource.setFileSizeFormatted(formatFileSize(resource.getFileSize()));
             resource.setCategoryName(getCategoryName(resource.getCategory()));

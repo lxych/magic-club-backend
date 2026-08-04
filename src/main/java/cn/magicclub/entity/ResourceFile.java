@@ -106,6 +106,11 @@ public class ResourceFile implements Serializable {
     @TableField(fill = FieldFill.INSERT)
     private Integer deleted;
 
+    /**
+     * 审批人ID
+     */
+    private Long auditorId;
+
     // ==================== 非数据库字段 ====================
 
     /**
@@ -113,6 +118,12 @@ public class ResourceFile implements Serializable {
      */
     @TableField(exist = false)
     private String uploaderName;
+
+    /**
+     * 审批人名称
+     */
+    @TableField(exist = false)
+    private String auditorName;
 
     /**
      * 文件大小格式化

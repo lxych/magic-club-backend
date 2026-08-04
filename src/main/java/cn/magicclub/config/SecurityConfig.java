@@ -1,6 +1,8 @@
 package cn.magicclub.config;
 
 import cn.magicclub.common.JwtUtil;
+import cn.magicclub.mapper.UserMapper;
+import cn.magicclub.mapper.UserTokenMapper;
 import cn.magicclub.security.JwtAuthenticationFilter;
 import cn.magicclub.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,8 @@ public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
     private final UserService userService;
+    private final UserMapper userMapper;
+    private final UserTokenMapper userTokenMapper;
 
     /**
      * 密码编码器
@@ -69,7 +73,7 @@ public class SecurityConfig {
      */
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter(jwtUtil);
+        return new JwtAuthenticationFilter(jwtUtil, userMapper, userTokenMapper);
     }
 
     /**

@@ -67,4 +67,9 @@ public interface UserService extends IService<User>, UserDetailsService {
      * 取消毕业标记
      */
     boolean cancelGraduated(Long userId);
+
+    /**
+     * 清除用户所有Token（强制下线）
+     */
+    void clearUserTokens(Long userId);
 }

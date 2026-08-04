@@ -2,7 +2,9 @@ package cn.magicclub.service.impl;
 
 import cn.magicclub.common.JwtUtil;
 import cn.magicclub.entity.User;
+import cn.magicclub.entity.UserToken;
 import cn.magicclub.mapper.UserMapper;
+import cn.magicclub.mapper.UserTokenMapper;
 import cn.magicclub.service.UserService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 
 /**
@@ -28,6 +31,7 @@ import java.util.Collections;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService, UserDetailsService {
 
     private final UserMapper userMapper;
+    private final UserTokenMapper userTokenMapper;
     private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -101,7 +105,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         // 生成JWT token
-        return jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        String jwt = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+
+        // 清除旧 Token，写入新 Token（单设备登录）
+        userTokenMapper.deleteByUserId(user.getId());
+        UserToken userToken = new UserToken();
+        userToken.setUserId(user.getId());
+        userToken.setToken(jwt);
+        userToken.setLoginTime(LocalDateTime.now());
+        userToken.setExpireTime(LocalDateTime.now().plusDays(1));
+        userToken.setStatus(1);
+        userTokenMapper.insert(userToken);
+
+        return jwt;
     }
 
     @Override
@@ -206,5 +222,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setRole("MEMBER"); // 恢复为普通成员
         
         return userMapper.updateById(user) > 0;
+    }
+
+    @Override
+    @Transactional
+    public void clearUserTokens(Long userId) {
+        userTokenMapper.deleteByUserId(userId);
     }
 }

@@ -319,6 +319,9 @@ public class UserController {
         // 标记用户为强制下线
         user.setForcedLogout(1);
         userService.updateById(user);
+
+        // 清除该用户所有 Token，立即踢下线
+        userService.clearUserTokens(id);
         
         // 同时作废邀请码
         Long adminId = jwtUtil.getUserIdFromToken(token);

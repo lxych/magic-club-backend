@@ -14,9 +14,6 @@ import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * 资源Controller
- *
- * @author demo
- * @since 2025-04-13
  */
 @RestController
 @RequestMapping("/resource")
@@ -27,46 +24,20 @@ public class ResourceController {
     private final JwtUtil jwtUtil;
 
     /**
-     * 上传文件 (仅管理员)
+     * 上传文件（所有登录用户）
      */
     @PostMapping("/upload")
     public Result<ResourceFile> uploadFile(@RequestHeader("Authorization") String token,
                                            @RequestParam("file") MultipartFile file,
                                            @RequestParam(required = false) String description,
                                            @RequestParam(required = false) String category) {
-        // 验证管理员权限
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可上传资源");
-        }
-        
         Long userId = getUserIdFromToken(token);
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
-
+        if (userId == null) return Result.error(401, "请先登录");
         ResourceFile resourceFile = resourceFileService.uploadFile(file, userId, description, category);
-        return Result.ok("上传成功", resourceFile);
+        return Result.ok("上传成功，等待管理员审批", resourceFile);
     }
 
-    /**
-     * 删除文件
-     */
-    @DeleteMapping("/{id}")
-    public Result<Boolean> deleteFile(@RequestHeader("Authorization") String token,
-                                      @PathVariable Long id) {
-        Long userId = getUserIdFromToken(token);
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
-
-        boolean success = resourceFileService.deleteFile(id, userId);
-        return Result.ok("删除成功", success);
-    }
-
-    /**
-     * 分页查询资源列表
-     */
+    /** 分页查询（已通过） */
     @GetMapping("/list")
     public Result<IPage<ResourceFile>> list(
             @RequestParam(defaultValue = "1") Integer pageNum,
@@ -74,66 +45,86 @@ public class ResourceController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String fileType,
             @RequestParam(required = false) String keyword) {
-
         IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
-        IPage<ResourceFile> resultPage = resourceFileService.getResourcePage(page, category, fileType, keyword);
-        return Result.ok(resultPage);
+        return Result.ok(resourceFileService.getResourcePage(page, category, fileType, keyword));
     }
 
-    /**
-     * 获取资源详情
-     */
+    /** 我的资源 */
+    @GetMapping("/my")
+    public Result<IPage<ResourceFile>> getMyResources(@RequestHeader("Authorization") String token,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        Long userId = getUserIdFromToken(token);
+        if (userId == null) return Result.error(401, "请先登录");
+        IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
+        return Result.ok(resourceFileService.getUserResources(page, userId));
+    }
+
+    /** 待审批列表（管理员） */
+    @GetMapping("/pending")
+    public Result<IPage<ResourceFile>> pendingList(@RequestHeader("Authorization") String token,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
+        IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
+        return Result.ok(resourceFileService.getResourcesByStatus(page, 0));
+    }
+
+    /** 按状态查全部资源（管理员） */
+    @GetMapping("/status/{status}")
+    public Result<IPage<ResourceFile>> listByStatus(@RequestHeader("Authorization") String token,
+            @PathVariable Integer status,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+        if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
+        IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
+        return Result.ok(resourceFileService.getResourcesByStatus(page, status));
+    }
+
+    /** 资源详情 */
     @GetMapping("/{id}")
     public Result<ResourceFile> getDetail(@PathVariable Long id) {
-        ResourceFile resourceFile = resourceFileService.getResourceDetail(id);
-        return Result.ok(resourceFile);
+        return Result.ok(resourceFileService.getResourceDetail(id));
     }
 
-    /**
-     * 下载文件
-     */
+    /** 下载 */
     @GetMapping("/{id}/download")
     public void downloadFile(@PathVariable Long id, HttpServletResponse response) {
         resourceFileService.downloadFile(id, response);
     }
 
-    /**
-     * 获取用户的资源列表
-     */
-    @GetMapping("/my")
-    public Result<IPage<ResourceFile>> getMyResources(
-            @RequestHeader("Authorization") String token,
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
-
+    /** 删除 */
+    @DeleteMapping("/{id}")
+    public Result<Boolean> deleteFile(@RequestHeader("Authorization") String token,
+                                      @PathVariable Long id) {
         Long userId = getUserIdFromToken(token);
-        if (userId == null) {
-            return Result.error(401, "请先登录");
-        }
-
-        IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
-        IPage<ResourceFile> resultPage = resourceFileService.getUserResources(page, userId);
-        return Result.ok(resultPage);
+        if (userId == null) return Result.error(401, "请先登录");
+        return Result.ok("删除成功", resourceFileService.deleteFile(id, userId));
     }
 
-    /**
-     * 审核资源 (管理员功能)
-     */
+    /** 审批 */
     @PostMapping("/{id}/audit")
-    public Result<Boolean> auditResource(@PathVariable Long id,
-                                          @RequestParam Integer status) {
-        boolean success = resourceFileService.auditResource(id, status);
-        return Result.ok("审核完成", success);
+    public Result<Boolean> auditResource(@RequestHeader("Authorization") String token,
+            @PathVariable Long id, @RequestParam Integer status) {
+        if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
+        Long auditorId = getUserIdFromToken(token);
+        return Result.ok("审核完成", resourceFileService.auditResource(id, status, auditorId));
     }
 
-    /**
-     * 从Token中获取用户ID
-     */
+    /** 预览（inline，不触发下载） */
+    @GetMapping("/{id}/preview")
+    public void previewFile(@PathVariable Long id, HttpServletResponse response) {
+        resourceFileService.previewFile(id, response);
+    }
+
     private Long getUserIdFromToken(String token) {
         if (token == null) return null;
-        if (token.startsWith("Bearer ")) {
-            token = token.substring(7);
-        }
+        if (token.startsWith("Bearer ")) token = token.substring(7);
         return jwtUtil.getUserIdFromToken(token);
+    }
+
+    private boolean isAdmin(String token) {
+        if (token == null || !token.startsWith("Bearer ")) return false;
+        return "ADMIN".equals(jwtUtil.getRoleFromToken(token.substring(7)));
     }
 }
