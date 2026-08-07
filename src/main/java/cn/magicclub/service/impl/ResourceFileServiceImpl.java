@@ -4,11 +4,13 @@ import cn.magicclub.entity.ResourceFile;
 import cn.magicclub.entity.User;
 import cn.magicclub.mapper.ResourceFileMapper;
 import cn.magicclub.mapper.UserMapper;
+import cn.magicclub.service.OssService;
 import cn.magicclub.service.ResourceFileService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,12 +40,14 @@ import java.util.stream.Collectors;
  * @author demo
  * @since 2025-04-13
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, ResourceFile> implements ResourceFileService {
 
     private final ResourceFileMapper resourceFileMapper;
     private final UserMapper userMapper;
+    private final OssService ossService;
 
     @Value("${file.upload.path}")
     private String uploadPath;
@@ -81,18 +85,30 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         String relativePath = datePath + "/" + fileName;
         String fullPath = uploadPath + relativePath;
 
-        // 创建目录
-        File dir = new File(uploadPath + datePath);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
+        // 创建目录并保存文件，或上传到 OSS
+        String fileUrl;
+        boolean isOss = file.getSize() > ossService.getFileSizeThreshold();
 
-        // 保存文件
-        try {
-            File dest = new File(fullPath);
-            file.transferTo(dest);
-        } catch (Exception e) {
-            throw new RuntimeException("文件上传失败: " + e.getMessage());
+        if (isOss) {
+            // 大文件 → OSS
+            try {
+                fileUrl = ossService.uploadFile(file);
+            } catch (Exception e) {
+                throw new RuntimeException("OSS 文件上传失败: " + e.getMessage());
+            }
+        } else {
+            // 小文件 → 本地
+            File dir = new File(uploadPath + datePath);
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+            try {
+                File dest = new File(fullPath);
+                file.transferTo(dest);
+            } catch (Exception e) {
+                throw new RuntimeException("文件上传失败: " + e.getMessage());
+            }
+            fileUrl = "/uploads/" + relativePath;
         }
 
         // 保存数据库记录
@@ -102,8 +118,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         resourceFile.setDescription(description);
         resourceFile.setFileType(getFileType(extension));
         resourceFile.setFileSize(file.getSize());
-        resourceFile.setFilePath(fullPath);
-        resourceFile.setFileUrl("/uploads/" + relativePath);
+        resourceFile.setFilePath(isOss ? fileUrl : fullPath);
+        resourceFile.setFileUrl(fileUrl);
         resourceFile.setMimeType(file.getContentType());
         resourceFile.setUserId(userId);
         resourceFile.setDownloadCount(0);
@@ -132,10 +148,18 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         }
 
         // 删除物理文件
-        Path path = Paths.get(resourceFile.getFilePath());
-        File file = path.toFile();
-        if (file.exists()) {
-            file.delete();
+        if (isOssFile(resourceFile.getFileUrl())) {
+            try {
+                ossService.deleteFile(resourceFile.getFileUrl());
+            } catch (Exception e) {
+                log.warn("OSS 文件删除失败（记录已删除）: {}", resourceFile.getFileUrl(), e);
+            }
+        } else {
+            Path path = Paths.get(resourceFile.getFilePath());
+            File file = path.toFile();
+            if (file.exists()) {
+                file.delete();
+            }
         }
 
         return resourceFileMapper.deleteById(fileId) > 0;
@@ -147,6 +171,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         wrapper.eq(ResourceFile::getStatus, 1);
         wrapper.eq(ResourceFile::getIsPublic, 1);
         wrapper.eq(ResourceFile::getDeleted, 0);
+        wrapper.ne(ResourceFile::getCategory, "FORUM"); // 论坛图片不展示在资源中心
+    wrapper.ne(ResourceFile::getCategory, "memorial"); // 纪念墙图片不展示在资源中心
 
         // 分类筛选
         if (StringUtils.hasText(category)) {
@@ -185,7 +211,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         // 填充上传者信息
         User user = userMapper.selectById(resourceFile.getUserId());
         if (user != null) {
-            resourceFile.setUploaderName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+            resourceFile.setUploaderName(user.getDisplayName());
         }
 
         // 格式化文件大小
@@ -209,16 +235,27 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             throw new RuntimeException("该资源不允许下载，仅支持在线查看");
         }
 
-        // 使用 Paths 处理路径
+        // 增加下载次数
+        incrementDownloadCount(fileId);
+
+        // OSS 文件：重定向到签名下载链接
+        if (isOssFile(resourceFile.getFileUrl())) {
+            try {
+                String signedUrl = ossService.getDownloadUrl(resourceFile.getFileUrl(), resourceFile.getOriginalName());
+                response.sendRedirect(signedUrl);
+            } catch (Exception e) {
+                throw new RuntimeException("OSS 文件下载失败: " + e.getMessage());
+            }
+            return;
+        }
+
+        // 本地文件：原有下载逻辑
         Path path = Paths.get(resourceFile.getFilePath());
         File file = path.toFile();
         
         if (!file.exists()) {
             throw new RuntimeException("文件已被删除");
         }
-
-        // 增加下载次数
-        incrementDownloadCount(fileId);
 
         // 设置响应头
         response.setContentType(resourceFile.getMimeType());
@@ -245,6 +282,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ResourceFile::getUserId, userId);
         wrapper.eq(ResourceFile::getDeleted, 0);
+        wrapper.ne(ResourceFile::getCategory, "FORUM");
         wrapper.orderByDesc(ResourceFile::getCreateTime);
 
         return resourceFileMapper.selectPage(page, wrapper);
@@ -253,17 +291,20 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     @Transactional
     public boolean auditResource(Long fileId, Integer status) {
-        return auditResource(fileId, status, null);
+        return auditResource(fileId, status, null, null);
     }
 
     @Override
     @Transactional
-    public boolean auditResource(Long fileId, Integer status, Long auditorId) {
+    public boolean auditResource(Long fileId, Integer status, Long auditorId, Integer allowDownload) {
         ResourceFile resourceFile = new ResourceFile();
         resourceFile.setId(fileId);
         resourceFile.setStatus(status);
         if (auditorId != null) {
             resourceFile.setAuditorId(auditorId);
+        }
+        if (allowDownload != null) {
+            resourceFile.setAllowDownload(allowDownload);
         }
         return resourceFileMapper.updateById(resourceFile) > 0;
     }
@@ -274,12 +315,63 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     }
 
     @Override
+    @Transactional
+    public ResourceFile completeOssUpload(Long userId, String fileName, String ossUrl, Long fileSize,
+                                          String description, String category) {
+        if (ossUrl == null || ossUrl.isEmpty()) {
+            throw new RuntimeException("OSS URL 不能为空");
+        }
+        if (fileName == null || fileName.isEmpty()) {
+            throw new RuntimeException("文件名不能为空");
+        }
+
+        String extension = getFileExtension(fileName).toLowerCase();
+        if (!ALLOWED_TYPES.contains(extension)) {
+            throw new RuntimeException("不支持的文件类型: " + extension);
+        }
+
+        // 保存数据库记录
+        ResourceFile resourceFile = new ResourceFile();
+        resourceFile.setName(UUID.randomUUID().toString().replace("-", "") + "." + extension);
+        resourceFile.setOriginalName(fileName);
+        resourceFile.setDescription(description);
+        resourceFile.setFileType(getFileType(extension));
+        resourceFile.setFileSize(fileSize);
+        resourceFile.setFilePath(ossUrl);  // OSS URL 作为 path
+        resourceFile.setFileUrl(ossUrl);   // OSS URL 作为访问 URL
+        resourceFile.setMimeType(getMimeType(extension));
+        resourceFile.setUserId(userId);
+        resourceFile.setDownloadCount(0);
+        resourceFile.setCategory(category != null ? category : "OTHER");
+        resourceFile.setIsPublic(1);
+        resourceFile.setStatus(0); // 默认待审批
+        resourceFile.setAllowDownload(1);
+
+        resourceFileMapper.insert(resourceFile);
+        log.info("OSS 直传记录已创建: {} -> {}", fileName, ossUrl);
+
+        return resourceFile;
+    }
+
+    @Override
     public void previewFile(Long fileId, HttpServletResponse response) {
         ResourceFile resourceFile = resourceFileMapper.selectById(fileId);
         if (resourceFile == null || resourceFile.getDeleted() == 1) {
             throw new RuntimeException("文件不存在");
         }
 
+        // OSS 文件：重定向到签名预览链接
+        if (isOssFile(resourceFile.getFileUrl())) {
+            try {
+                String signedUrl = ossService.getPreviewUrl(resourceFile.getFileUrl());
+                response.sendRedirect(signedUrl);
+            } catch (Exception e) {
+                throw new RuntimeException("OSS 文件预览失败: " + e.getMessage());
+            }
+            return;
+        }
+
+        // 本地文件：原有预览逻辑
         Path path = Paths.get(resourceFile.getFilePath());
         File file = path.toFile();
         if (!file.exists()) {
@@ -308,6 +400,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ResourceFile::getStatus, status);
         wrapper.eq(ResourceFile::getDeleted, 0);
+        wrapper.ne(ResourceFile::getCategory, "FORUM");
+        wrapper.ne(ResourceFile::getCategory, "memorial");
         wrapper.orderByDesc(ResourceFile::getCreateTime);
         IPage<ResourceFile> result = resourceFileMapper.selectPage(page, wrapper);
         fillResourceRelatedData(result.getRecords());
@@ -319,6 +413,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ResourceFile::getStatus, 0);
         wrapper.eq(ResourceFile::getDeleted, 0);
+        wrapper.ne(ResourceFile::getCategory, "FORUM");
+        wrapper.ne(ResourceFile::getCategory, "memorial");
         wrapper.orderByDesc(ResourceFile::getCreateTime);
         IPage<ResourceFile> result = resourceFileMapper.selectPage(page, wrapper);
         fillResourceRelatedData(result.getRecords());
@@ -357,12 +453,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         for (ResourceFile resource : resources) {
             User user = userMap.get(resource.getUserId());
             if (user != null) {
-                resource.setUploaderName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+                resource.setUploaderName(user.getDisplayName());
             }
             if (resource.getAuditorId() != null) {
                 User auditor = auditorMap.get(resource.getAuditorId());
                 if (auditor != null) {
-                    resource.setAuditorName(auditor.getRealName() != null ? auditor.getRealName() : auditor.getUsername());
+                    resource.setAuditorName(auditor.getDisplayName());
                 }
             }
             resource.setFileSizeFormatted(formatFileSize(resource.getFileSize()));
@@ -397,6 +493,34 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     }
 
     /**
+     * 根据扩展名推断 MIME 类型
+     */
+    private String getMimeType(String extension) {
+        extension = extension.toLowerCase();
+        switch (extension) {
+            case "jpg": case "jpeg": return "image/jpeg";
+            case "png": return "image/png";
+            case "gif": return "image/gif";
+            case "bmp": return "image/bmp";
+            case "mp4": return "video/mp4";
+            case "avi": return "video/x-msvideo";
+            case "mov": return "video/quicktime";
+            case "wmv": return "video/x-ms-wmv";
+            case "pdf": return "application/pdf";
+            case "doc": return "application/msword";
+            case "docx": return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            case "txt": return "text/plain";
+            case "ppt": return "application/vnd.ms-powerpoint";
+            case "pptx": return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            case "xls": return "application/vnd.ms-excel";
+            case "xlsx": return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            case "zip": return "application/zip";
+            case "rar": return "application/x-rar-compressed";
+            default: return "application/octet-stream";
+        }
+    }
+
+    /**
      * 格式化文件大小
      */
     private String formatFileSize(long size) {
@@ -417,11 +541,18 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     private String getCategoryName(String category) {
         if (category == null) return "其他";
         switch (category) {
-            case "TUTORIAL": return "魔术教程";
-            case "SCRIPT": return "剧本资料";
-            case "PROP": return "道具制作";
-            case "PERFORMANCE": return "演出视频";
+            case "INTERNAL_SHOW": return "社团内部演出";
+            case "INTERNAL_TEACH": return "社团内部教学";
+            case "EXTERNAL_SHOW": return "外部演出";
+            case "EXTERNAL_TEACH": return "外部教学";
             default: return "其他";
         }
+    }
+
+    /**
+     * 判断文件是否为 OSS 存储
+     */
+    private boolean isOssFile(String fileUrl) {
+        return fileUrl != null && fileUrl.contains("aliyuncs.com");
     }
 }

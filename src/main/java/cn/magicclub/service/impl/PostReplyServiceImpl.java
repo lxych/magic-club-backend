@@ -128,7 +128,7 @@ public class PostReplyServiceImpl extends ServiceImpl<PostReplyMapper, PostReply
         for (PostReply reply : replies) {
             User user = userMap.get(reply.getUserId());
             if (user != null) {
-                reply.setAuthorName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+                reply.setAuthorName(user.getDisplayName());
                 reply.setAuthorAvatar(user.getAvatar());
             }
             
@@ -136,7 +136,7 @@ public class PostReplyServiceImpl extends ServiceImpl<PostReplyMapper, PostReply
             if (reply.getTargetUserId() != null) {
                 User targetUser = userMap.get(reply.getTargetUserId());
                 if (targetUser != null) {
-                    reply.setTargetUserName(targetUser.getRealName() != null ? targetUser.getRealName() : targetUser.getUsername());
+                reply.setTargetUserName(targetUser.getDisplayName());
                 }
             }
         }

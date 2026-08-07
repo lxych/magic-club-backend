@@ -60,6 +60,18 @@ file:
     allowed-types: jpg,jpeg,png,gif,bmp,mp4,avi,mov,wmv,doc,docx,pdf,txt,ppt,pptx,xls,xlsx,zip,rar
     max-size: 524288000  # 500MB
 
+# 阿里云 OSS 配置（部署时填入真实值）
+oss:
+  endpoint: oss-cn-beijing.aliyuncs.com
+  bucket: magic-club-video
+  access-key-id: your-access-key-id
+  access-key-secret: your-access-key-secret
+  file-size-threshold: 52428800  # 50MB，大于此阈值走 OSS
+  # STS 临时凭证（用于前端直传），可选。需要在 RAM 中创建角色，不填则使用主账号 AK
+  role-arn: acs:ram::your-account-id:role/oss-upload-role
+  role-session-name: oss-upload-session
+  sts-endpoint: sts.cn-beijing.aliyuncs.com  # STS 服务 endpoint
+
 # 日志
 logging:
   level:

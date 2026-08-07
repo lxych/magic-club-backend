@@ -166,7 +166,7 @@ public class MemorialServiceImpl extends ServiceImpl<MemorialMapper, Memorial> i
         for (Memorial memorial : list) {
             User user = userMap.get(memorial.getCreateBy());
             if (user != null) {
-                memorial.setCreateByName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+                memorial.setCreateByName(user.getDisplayName());
             }
         }
     }

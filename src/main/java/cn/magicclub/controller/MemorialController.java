@@ -133,8 +133,15 @@ public class MemorialController {
         try {
             List<String> urls = files.stream()
                     .map(file -> resourceFileService.uploadFile(file, userId, "纪念墙附件", "memorial", 1))
-                    .map(ResourceFile::getId)
-                    .map(id -> baseUrl + "/api/resource/" + id + "/download")
+                    .map(rf -> {
+                        // 纪念墙图片自动审批，不进审批流
+                        resourceFileService.lambdaUpdate()
+                                .set(ResourceFile::getStatus, 1)
+                                .eq(ResourceFile::getId, rf.getId())
+                                .update();
+                        return rf.getId();
+                    })
+                    .map(id -> "/api/resource/" + id + "/preview")
                     .collect(Collectors.toList());
             return Result.ok("上传成功", urls);
         } catch (Exception e) {

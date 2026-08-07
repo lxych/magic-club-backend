@@ -53,7 +53,7 @@ public interface ResourceFileService extends IService<ResourceFile> {
     /**
      * 审核资源（记录审批人）
      */
-    boolean auditResource(Long fileId, Integer status, Long auditorId);
+    boolean auditResource(Long fileId, Integer status, Long auditorId, Integer allowDownload);
 
     /**
      * 预览文件（inline）
@@ -74,4 +74,20 @@ public interface ResourceFileService extends IService<ResourceFile> {
      * 增加下载次数
      */
     void incrementDownloadCount(Long fileId);
+
+    /**
+     * OSS 直传完成后回调保存记录
+     * <p>
+     * 前端通过 STS Token 直传到 OSS 后，调用此接口创建 ResourceFile 数据库记录。
+     *
+     * @param userId      上传者 ID
+     * @param fileName    原始文件名
+     * @param ossUrl      OSS 完整 URL
+     * @param fileSize    文件大小（字节）
+     * @param description 文件描述
+     * @param category    资源分类
+     * @return 创建的 ResourceFile 记录
+     */
+    ResourceFile completeOssUpload(Long userId, String fileName, String ossUrl, Long fileSize,
+                                   String description, String category);
 }

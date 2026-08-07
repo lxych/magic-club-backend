@@ -1,13 +1,17 @@
 package cn.magicclub.service.impl;
 
 import cn.magicclub.common.JwtUtil;
+import cn.magicclub.common.RolePermissions;
 import cn.magicclub.entity.User;
 import cn.magicclub.entity.UserToken;
 import cn.magicclub.mapper.UserMapper;
 import cn.magicclub.mapper.UserTokenMapper;
 import cn.magicclub.service.UserService;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -19,6 +23,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
+import java.util.List;
 
 /**
  * 用户Service实现类
@@ -109,6 +114,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         // 清除旧 Token，写入新 Token（单设备登录）
         userTokenMapper.deleteByUserId(user.getId());
+
+        // 重置强制下线标记（允许重新登录）
+        if (Integer.valueOf(1).equals(user.getForcedLogout())) {
+            user.setForcedLogout(0);
+            userMapper.updateById(user);
+        }
+
         UserToken userToken = new UserToken();
         userToken.setUserId(user.getId());
         userToken.setToken(jwt);
@@ -228,5 +240,37 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Transactional
     public void clearUserTokens(Long userId) {
         userTokenMapper.deleteByUserId(userId);
+    }
+
+    @Override
+    public List<String> getUserPermissions(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return Collections.emptyList();
+        }
+        return RolePermissions.getUserPermissions(user);
+    }
+
+    @Override
+    @Transactional
+    public void updateUserPermissions(Long userId, List<String> permissions) {
+        User user = new User();
+        user.setId(userId);
+
+        if (permissions == null || permissions.isEmpty()) {
+            // 清空自定义权限，恢复角色默认 - 用 LambdaUpdateWrapper 保证 null 能更新
+            LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<User>()
+                    .eq(User::getId, userId)
+                    .set(User::getPermissions, null);
+            userMapper.update(null, wrapper);
+        } else {
+            try {
+                ObjectMapper mapper = new ObjectMapper();
+                user.setPermissions(mapper.writeValueAsString(permissions));
+                userMapper.updateById(user);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException("权限序列化失败", e);
+            }
+        }
     }
 }

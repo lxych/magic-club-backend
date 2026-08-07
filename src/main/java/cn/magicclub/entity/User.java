@@ -37,6 +37,11 @@ public class User implements Serializable {
     private String realName;
 
     /**
+     * 昵称
+     */
+    private String nickname;
+
+    /**
      * 性别: 0-未知 1-男 2-女
      */
     private Integer gender;
@@ -114,6 +119,11 @@ public class User implements Serializable {
     private Integer forcedLogout;
 
     /**
+     * 自定义权限列表（JSON数组），为空时使用角色默认权限
+     */
+    private String permissions;
+
+    /**
      * 创建时间
      */
     @TableField(fill = FieldFill.INSERT)
@@ -157,4 +167,13 @@ public class User implements Serializable {
      */
     @TableField(exist = false)
     private String inviteCode;
+
+    /**
+     * 获取显示名称：昵称 > 真实姓名 > 用户名
+     */
+    public String getDisplayName() {
+        if (nickname != null && !nickname.isEmpty()) return nickname;
+        if (realName != null && !realName.isEmpty()) return realName;
+        return username;
+    }
 }

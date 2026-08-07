@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.security.core.userdetails.UserDetailsService;
 
+import java.util.List;
+
 /**
  * 用户Service接口
  *
@@ -72,4 +74,16 @@ public interface UserService extends IService<User>, UserDetailsService {
      * 清除用户所有Token（强制下线）
      */
     void clearUserTokens(Long userId);
+
+    /**
+     * 获取用户实际权限列表（自定义权限 > 角色默认）
+     */
+    List<String> getUserPermissions(Long userId);
+
+    /**
+     * 更新用户自定义权限
+     * @param userId 用户ID
+     * @param permissions 权限列表，传 null 或空列表表示恢复角色默认权限
+     */
+    void updateUserPermissions(Long userId, List<String> permissions);
 }

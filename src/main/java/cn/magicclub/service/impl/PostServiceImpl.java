@@ -117,7 +117,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         // 填充作者信息
         User user = userMapper.selectById(post.getUserId());
         if (user != null) {
-            post.setAuthorName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+            post.setAuthorName(user.getDisplayName());
             post.setAuthorAvatar(user.getAvatar());
         }
 
@@ -194,7 +194,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         for (Post post : posts) {
             User user = userMap.get(post.getUserId());
             if (user != null) {
-                post.setAuthorName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+                post.setAuthorName(user.getDisplayName());
                 post.setAuthorAvatar(user.getAvatar());
             }
             post.setCategoryName(getCategoryName(post.getCategory()));

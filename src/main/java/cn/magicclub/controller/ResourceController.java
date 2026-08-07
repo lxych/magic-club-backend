@@ -123,7 +123,7 @@ public class ResourceController {
             @PathVariable Long id, @RequestParam Integer status) {
         if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
         Long auditorId = getUserIdFromToken(token);
-        return Result.ok("审核完成", resourceFileService.auditResource(id, status, auditorId));
+        return Result.ok("审核完成", resourceFileService.auditResource(id, status, auditorId, null));
     }
 
     /** 预览（inline，不触发下载） */

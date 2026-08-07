@@ -42,4 +42,10 @@ public interface UserMapper extends BaseMapper<User> {
             "<if test='graduationYear != null'>AND graduation_year = #{graduationYear}</if> " +
             "ORDER BY graduation_year DESC, id DESC</script>")
     IPage<User> selectGraduatedUsers(IPage<User> page, @Param("graduationYear") Integer graduationYear);
+
+    /**
+     * 查询所有启用的活跃用户（status=1, deleted=0）
+     */
+    @Select("SELECT * FROM mc_user WHERE status = 1 AND deleted = 0")
+    java.util.List<User> findAllActiveUsers();
 }

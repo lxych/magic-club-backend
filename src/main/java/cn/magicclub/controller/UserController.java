@@ -2,19 +2,30 @@ package cn.magicclub.controller;
 
 import cn.magicclub.common.JwtUtil;
 import cn.magicclub.common.Result;
+import cn.magicclub.common.RolePermissions;
 import cn.magicclub.dto.LoginRequest;
+import cn.magicclub.entity.OperationLog;
+import cn.magicclub.entity.Post;
+import cn.magicclub.entity.ResourceFile;
 import cn.magicclub.entity.User;
 import cn.magicclub.service.InviteCodeService;
+import cn.magicclub.service.OperationLogService;
+import cn.magicclub.service.PostService;
+import cn.magicclub.service.ResourceFileService;
 import cn.magicclub.service.SystemConfigService;
 import cn.magicclub.service.UserService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 用户Controller
@@ -31,6 +42,10 @@ public class UserController {
     private final JwtUtil jwtUtil;
     private final InviteCodeService inviteCodeService;
     private final SystemConfigService systemConfigService;
+    private final PostService postService;
+    private final ResourceFileService resourceFileService;
+    private final OperationLogService operationLogService;
+    private final HttpServletRequest request;
 
     /**
      * 用户注册 (需要邀请码)
@@ -71,6 +86,9 @@ public class UserController {
         if (user != null) {
             user.setPassword(null);
             data.put("userInfo", user);
+            // 返回实际权限列表
+            List<String> permissions = RolePermissions.getUserPermissions(user);
+            data.put("permissions", permissions);
         }
         
         return Result.ok("登录成功", data);
@@ -80,7 +98,7 @@ public class UserController {
      * 获取当前登录用户信息
      */
     @GetMapping("/info")
-    public Result<User> getCurrentUser(@RequestHeader("Authorization") String token) {
+    public Result<Map<String, Object>> getCurrentUser(@RequestHeader("Authorization") String token) {
         // 去掉Bearer前缀
         if (token.startsWith("Bearer ")) {
             token = token.substring(7);
@@ -97,7 +115,13 @@ public class UserController {
         }
         
         user.setPassword(null);
-        return Result.ok(user);
+        
+        // 返回用户信息和权限
+        Map<String, Object> data = new HashMap<>();
+        data.put("userInfo", user);
+        List<String> permissions = RolePermissions.getUserPermissions(user);
+        data.put("permissions", permissions);
+        return Result.ok(data);
     }
 
     /**
@@ -354,6 +378,151 @@ public class UserController {
             return Result.error(403, "仅管理员可设置禁言状态");
         }
         systemConfigService.setGlobalMute(mute);
+
+        // 操作日志
+        saveOperationLog(token, mute ? "MUTE_USER" : "UNMUTE_USER",
+                "全局", "0",
+                mute ? "开启全员禁言" : "关闭全员禁言");
+
         return Result.ok(mute ? "已开启全员禁言" : "已关闭全员禁言", true);
+    }
+
+    /**
+     * 修改用户角色（仅管理员）
+     */
+    @PutMapping("/{id}/role")
+    public Result<Boolean> updateUserRole(@RequestHeader("Authorization") String token,
+                                           @PathVariable Long id,
+                                           @RequestParam String role) {
+        String adminRole = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
+        if (!"ADMIN".equals(adminRole)) {
+            return Result.error(403, "仅管理员可修改用户角色");
+        }
+
+        // 验证角色值
+        java.util.Set<String> validRoles = java.util.Set.of("ADMIN", "MODERATOR", "MEMBER", "ALUMNI");
+        if (!validRoles.contains(role)) {
+            return Result.error(400, "无效的角色: " + role);
+        }
+
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        if ("ADMIN".equals(user.getRole())) {
+            return Result.error(403, "不能修改管理员角色");
+        }
+
+        String oldRole = user.getRole();
+        user.setRole(role);
+        userService.updateById(user);
+
+        // 如果角色变了，清除该用户的 token 使其重新登录
+        if (!oldRole.equals(role)) {
+            userService.clearUserTokens(id);
+        }
+
+        // 操作日志
+        saveOperationLog(token, "ROLE_CHANGE",
+                user.getUsername(),
+                String.valueOf(id),
+                "角色变更: " + oldRole + " → " + role);
+
+        return Result.ok("角色已更新", true);
+    }
+
+    /**
+     * 获取用户权限列表（仅管理员）
+     */
+    @GetMapping("/{id}/permissions")
+    public Result<List<String>> getUserPermissions(@RequestHeader("Authorization") String token,
+                                                    @PathVariable Long id) {
+        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
+        if (!"ADMIN".equals(role)) {
+            return Result.error(403, "仅管理员可查看用户权限");
+        }
+
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+
+        List<String> permissions = RolePermissions.getUserPermissions(user);
+        return Result.ok(permissions);
+    }
+
+    /**
+     * 更新用户自定义权限（仅管理员）
+     */
+    @PutMapping("/{id}/permissions")
+    public Result<Boolean> updateUserPermissions(@RequestHeader("Authorization") String token,
+                                                  @PathVariable Long id,
+                                                  @RequestBody Map<String, List<String>> body) {
+        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
+        if (!"ADMIN".equals(role)) {
+            return Result.error(403, "仅管理员可修改用户权限");
+        }
+
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+
+        List<String> permissions = body.get("permissions");
+        userService.updateUserPermissions(id, permissions);
+
+        // 清除该用户 Token 使其重新登录以获取新权限
+        userService.clearUserTokens(id);
+
+        // 操作日志
+        User targetUser = userService.getById(id);
+        saveOperationLog(token, "PERMISSION_CHANGE",
+                targetUser != null ? targetUser.getUsername() : String.valueOf(id),
+                String.valueOf(id),
+                "权限更新: " + (permissions != null ? String.join(", ", permissions) : "恢复默认"));
+
+        return Result.ok("权限已更新", true);
+    }
+
+    // ==================== 私有辅助方法 ====================
+
+    /**
+     * 保存操作日志
+     */
+    private void saveOperationLog(String token, String action, String target, String targetId, String detail) {
+        try {
+            Long userId = jwtUtil.getUserIdFromToken(token.replace("Bearer ", ""));
+            String username = jwtUtil.getUsernameFromToken(token.replace("Bearer ", ""));
+
+            OperationLog log = new OperationLog();
+            log.setUserId(userId);
+            log.setUsername(username);
+            log.setAction(action);
+            log.setTarget(target);
+            log.setTargetId(targetId);
+            log.setDetail(detail);
+            log.setIp(getClientIp());
+            operationLogService.addLog(log);
+        } catch (Exception e) {
+            // 日志记录失败不影响业务
+        }
+    }
+
+    /**
+     * 获取客户端真实IP
+     */
+    private String getClientIp() {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        // 多级代理取第一个IP
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        return ip;
     }
 }
