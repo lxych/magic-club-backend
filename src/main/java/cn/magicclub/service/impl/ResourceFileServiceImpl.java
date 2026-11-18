@@ -141,9 +141,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             throw new RuntimeException("文件不存在");
         }
 
-        // 检查权限
+        // 检查权限：本人可删自己的文件，其他人需要 resource:delete 权限
         User user = userMapper.selectById(userId);
-        if (!resourceFile.getUserId().equals(userId) && !"ADMIN".equals(user.getRole())) {
+        boolean canDeleteAny = user != null
+                && cn.magicclub.common.RolePermissions.getUserPermissions(user)
+                        .contains(cn.magicclub.common.PermissionConstants.RESOURCE_DELETE);
+        if (!resourceFile.getUserId().equals(userId) && !canDeleteAny) {
             throw new RuntimeException("没有权限删除该文件");
         }
 

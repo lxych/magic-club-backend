@@ -254,11 +254,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional
     public void updateUserPermissions(Long userId, List<String> permissions) {
-        User user = new User();
-        user.setId(userId);
+        User target = userMapper.selectById(userId);
+        if (target == null) {
+            throw new RuntimeException("用户不存在");
+        }
 
-        if (permissions == null || permissions.isEmpty()) {
-            // 清空自定义权限，恢复角色默认 - 用 LambdaUpdateWrapper 保证 null 能更新
+        // 只保存「角色默认之外」的增量权限。
+        // 前端提交的是完整勾选集，这里过滤掉角色自带的，避免：
+        //   1. 自定义字段里塞满角色默认权限，看不出真正额外授了什么；
+        //   2. 后续调整角色默认权限时，用户被旧快照"锁死"。
+        java.util.Set<String> roleDefaults = RolePermissions.getPermissions(target.getRole());
+        List<String> extras = new java.util.ArrayList<>();
+        if (permissions != null) {
+            for (String code : permissions) {
+                String c = code == null ? null : code.trim();
+                if (c != null && !c.isEmpty() && !roleDefaults.contains(c) && !extras.contains(c)) {
+                    extras.add(c);
+                }
+            }
+        }
+
+        if (extras.isEmpty()) {
+            // 没有额外权限：清空字段（NULL），最终权限回落到角色默认
             LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<User>()
                     .eq(User::getId, userId)
                     .set(User::getPermissions, null);
@@ -266,8 +283,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         } else {
             try {
                 ObjectMapper mapper = new ObjectMapper();
-                user.setPermissions(mapper.writeValueAsString(permissions));
-                userMapper.updateById(user);
+                User update = new User();
+                update.setId(userId);
+                update.setPermissions(mapper.writeValueAsString(extras));
+                userMapper.updateById(update);
             } catch (JsonProcessingException e) {
                 throw new RuntimeException("权限序列化失败", e);
             }

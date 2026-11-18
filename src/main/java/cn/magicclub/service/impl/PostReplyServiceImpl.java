@@ -1,5 +1,7 @@
 package cn.magicclub.service.impl;
 
+import cn.magicclub.common.PermissionConstants;
+import cn.magicclub.common.RolePermissions;
 import cn.magicclub.entity.Post;
 import cn.magicclub.entity.PostReply;
 import cn.magicclub.entity.User;
@@ -62,9 +64,11 @@ public class PostReplyServiceImpl extends ServiceImpl<PostReplyMapper, PostReply
             throw new RuntimeException("回复不存在");
         }
 
-        // 检查权限
+        // 检查权限：本人可删自己的回复，其他人需要 forum:delete 权限
         User user = userMapper.selectById(userId);
-        if (!reply.getUserId().equals(userId) && !"ADMIN".equals(user.getRole())) {
+        boolean canDeleteAny = user != null
+                && RolePermissions.getUserPermissions(user).contains(PermissionConstants.FORUM_DELETE);
+        if (!reply.getUserId().equals(userId) && !canDeleteAny) {
             throw new RuntimeException("没有权限删除该回复");
         }
 

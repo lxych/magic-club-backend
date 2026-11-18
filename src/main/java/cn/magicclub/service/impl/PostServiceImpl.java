@@ -1,5 +1,7 @@
 package cn.magicclub.service.impl;
 
+import cn.magicclub.common.PermissionConstants;
+import cn.magicclub.common.RolePermissions;
 import cn.magicclub.entity.Post;
 import cn.magicclub.entity.User;
 import cn.magicclub.mapper.PostMapper;
@@ -67,9 +69,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
             throw new RuntimeException("帖子不存在");
         }
 
-        // 检查权限（只能删除自己的帖子，除非是管理员）
+        // 检查权限：本人可删自己的帖子，其他人需要 forum:delete 权限（管理员/版主/自定义授权）
         User user = userMapper.selectById(userId);
-        if (!post.getUserId().equals(userId) && !"ADMIN".equals(user.getRole())) {
+        boolean canDeleteAny = user != null
+                && RolePermissions.getUserPermissions(user).contains(PermissionConstants.FORUM_DELETE);
+        if (!post.getUserId().equals(userId) && !canDeleteAny) {
             throw new RuntimeException("没有权限删除该帖子");
         }
 

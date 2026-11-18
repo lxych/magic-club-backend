@@ -1,7 +1,9 @@
 package cn.magicclub.common;
 
+import cn.magicclub.security.PermissionDeniedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.BindException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -16,6 +18,27 @@ import jakarta.servlet.http.HttpServletRequest;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * 权限不足：统一返回 code=403
+     */
+    @ExceptionHandler(PermissionDeniedException.class)
+    public Result<String> handlePermissionDenied(PermissionDeniedException e, HttpServletRequest request) {
+        log.warn("权限不足 [{}] - {}", request.getRequestURI(), e.getMessage());
+        return Result.error(403, e.getMessage());
+    }
+
+    /**
+     * 缺少 Authorization 头：说明调用方未携带凭证，统一返回 401
+     */
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public Result<String> handleMissingHeader(MissingRequestHeaderException e, HttpServletRequest request) {
+        log.warn("缺少请求头 [{}] - {}", request.getRequestURI(), e.getHeaderName());
+        if ("Authorization".equalsIgnoreCase(e.getHeaderName())) {
+            return Result.error(401, "请先登录");
+        }
+        return Result.error(400, "缺少必要的请求头: " + e.getHeaderName());
+    }
 
     /**
      * 业务异常

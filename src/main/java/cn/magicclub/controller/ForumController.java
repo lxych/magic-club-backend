@@ -1,9 +1,11 @@
 package cn.magicclub.controller;
 
 import cn.magicclub.common.JwtUtil;
+import cn.magicclub.common.PermissionConstants;
 import cn.magicclub.common.Result;
 import cn.magicclub.entity.Post;
 import cn.magicclub.entity.PostReply;
+import cn.magicclub.security.RequirePermission;
 import cn.magicclub.service.PostReplyService;
 import cn.magicclub.service.PostService;
 import cn.magicclub.service.SystemConfigService;
@@ -131,33 +133,27 @@ public class ForumController {
     }
 
     /**
-     * 置顶/取消置顶帖子 (管理员功能)
+     * 置顶/取消置顶帖子
+     * <p>
+     * 权限：forum:top（管理员与版主均拥有，支持用户级自定义授权）
      */
     @PostMapping("/post/{id}/top")
-    public Result<Boolean> toggleTop(@RequestHeader("Authorization") String token,
-                                     @PathVariable Long id,
+    @RequirePermission(PermissionConstants.FORUM_TOP)
+    public Result<Boolean> toggleTop(@PathVariable Long id,
                                      @RequestParam("isTop") Boolean isTop) {
-        // 检查管理员权限
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可置顶帖子");
-        }
         boolean success = postService.toggleTop(id, isTop);
         return Result.ok(isTop ? "置顶成功" : "取消置顶成功", success);
     }
 
     /**
-     * 设为精华/取消精华 (管理员功能)
+     * 设为精华/取消精华
+     * <p>
+     * 权限：forum:essence
      */
     @PostMapping("/post/{id}/essence")
-    public Result<Boolean> toggleEssence(@RequestHeader("Authorization") String token,
-                                         @PathVariable Long id,
+    @RequirePermission(PermissionConstants.FORUM_ESSENCE)
+    public Result<Boolean> toggleEssence(@PathVariable Long id,
                                          @RequestParam("isEssence") Boolean isEssence) {
-        // 检查管理员权限
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可设置精华");
-        }
         boolean success = postService.toggleEssence(id, isEssence);
         return Result.ok(isEssence ? "设为精华成功" : "取消精华成功", success);
     }

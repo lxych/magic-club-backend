@@ -1,6 +1,7 @@
 package cn.magicclub.controller;
 
 import cn.magicclub.common.JwtUtil;
+import cn.magicclub.common.PermissionConstants;
 import cn.magicclub.common.Result;
 import cn.magicclub.common.RolePermissions;
 import cn.magicclub.dto.LoginRequest;
@@ -8,6 +9,7 @@ import cn.magicclub.entity.OperationLog;
 import cn.magicclub.entity.Post;
 import cn.magicclub.entity.ResourceFile;
 import cn.magicclub.entity.User;
+import cn.magicclub.security.RequirePermission;
 import cn.magicclub.service.InviteCodeService;
 import cn.magicclub.service.OperationLogService;
 import cn.magicclub.service.PostService;
@@ -279,58 +281,46 @@ public class UserController {
     }
 
     /**
-     * 获取当前邀请码
+     * 获取当前邀请码（权限：user:manage）
      */
     @GetMapping("/invite-code")
+    @RequirePermission(PermissionConstants.USER_MANAGE)
     public Result<String> getInviteCode(@RequestHeader("Authorization") String token) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可查看邀请码");
-        }
         String code = inviteCodeService.getValidInviteCode();
         return Result.ok(code);
     }
 
     /**
-     * 设置新邀请码
+     * 设置新邀请码（权限：user:manage）
      */
     @PostMapping("/invite-code")
+    @RequirePermission(PermissionConstants.USER_MANAGE)
     public Result<Boolean> setInviteCode(@RequestHeader("Authorization") String token,
                                           @RequestParam String code) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可设置邀请码");
-        }
         Long userId = jwtUtil.getUserIdFromToken(token);
         inviteCodeService.setNewInviteCode(code, userId);
         return Result.ok("邀请码设置成功", true);
     }
 
     /**
-     * 作废当前邀请码
+     * 作废当前邀请码（权限：user:manage）
      */
     @DeleteMapping("/invite-code")
+    @RequirePermission(PermissionConstants.USER_MANAGE)
     public Result<Boolean> invalidateInviteCode(@RequestHeader("Authorization") String token,
                                                  @RequestParam String reason) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可作废邀请码");
-        }
         Long userId = jwtUtil.getUserIdFromToken(token);
         inviteCodeService.invalidateCurrentCode(reason, userId);
         return Result.ok("邀请码已作废", true);
     }
 
     /**
-     * 强制下线用户
+     * 强制下线用户（权限：user:manage）
      */
     @PostMapping("/{id}/force-logout")
+    @RequirePermission(PermissionConstants.USER_MANAGE)
     public Result<Boolean> forceLogout(@RequestHeader("Authorization") String token,
                                         @PathVariable Long id) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可强制下线用户");
-        }
         
         User user = userService.getById(id);
         if (user == null) {
@@ -355,28 +345,22 @@ public class UserController {
     }
 
     /**
-     * 获取禁言状态
+     * 获取禁言状态（权限：system:config）
      */
     @GetMapping("/global-mute")
+    @RequirePermission(PermissionConstants.SYSTEM_CONFIG)
     public Result<Boolean> getGlobalMuteStatus(@RequestHeader("Authorization") String token) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可查看禁言状态");
-        }
         boolean isMute = systemConfigService.isGlobalMute();
         return Result.ok(isMute);
     }
 
     /**
-     * 设置禁言状态
+     * 设置禁言状态（权限：system:config）
      */
     @PostMapping("/global-mute")
+    @RequirePermission(PermissionConstants.SYSTEM_CONFIG)
     public Result<Boolean> setGlobalMuteStatus(@RequestHeader("Authorization") String token,
                                                 @RequestParam boolean mute) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可设置禁言状态");
-        }
         systemConfigService.setGlobalMute(mute);
 
         // 操作日志
@@ -388,16 +372,13 @@ public class UserController {
     }
 
     /**
-     * 修改用户角色（仅管理员）
+     * 修改用户角色（权限：role:manage）
      */
     @PutMapping("/{id}/role")
+    @RequirePermission(PermissionConstants.ROLE_MANAGE)
     public Result<Boolean> updateUserRole(@RequestHeader("Authorization") String token,
                                            @PathVariable Long id,
                                            @RequestParam String role) {
-        String adminRole = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(adminRole)) {
-            return Result.error(403, "仅管理员可修改用户角色");
-        }
 
         // 验证角色值
         java.util.Set<String> validRoles = java.util.Set.of("ADMIN", "MODERATOR", "MEMBER", "ALUMNI");
@@ -409,18 +390,27 @@ public class UserController {
         if (user == null) {
             return Result.error("用户不存在");
         }
-        if ("ADMIN".equals(user.getRole())) {
-            return Result.error(403, "不能修改管理员角色");
-        }
 
         String oldRole = user.getRole();
+        if (oldRole.equals(role)) {
+            return Result.ok("角色未变化", true);
+        }
+
+        // 保护规则：系统必须至少保留一名管理员，不允许把最后一位管理员降级
+        if ("ADMIN".equals(oldRole) && !"ADMIN".equals(role)) {
+            long adminCount = userService.count(
+                    new LambdaQueryWrapper<User>().eq(User::getRole, "ADMIN"));
+            if (adminCount <= 1) {
+                return Result.error(400, "系统至少需要保留一名管理员，无法降级最后一位管理员");
+            }
+        }
+
         user.setRole(role);
         userService.updateById(user);
 
-        // 如果角色变了，清除该用户的 token 使其重新登录
-        if (!oldRole.equals(role)) {
-            userService.clearUserTokens(id);
-        }
+        // 注意：这里不再清除该用户的 Token。
+        // 权限与角色在每次请求时都从数据库实时读取（PermissionService），
+        // 因此改完角色对方刷新页面即生效，无需强制重新登录。
 
         // 操作日志
         saveOperationLog(token, "ROLE_CHANGE",
@@ -433,14 +423,14 @@ public class UserController {
 
     /**
      * 获取用户权限列表（仅管理员）
+     * <p>
+     * 返回的是**最终生效**的权限 = 角色默认 ∪ 自定义增量，供展示用。
+     * 需要区分「哪些是角色给的、哪些是单独授的」，用 /{id}/permissions/detail。
      */
     @GetMapping("/{id}/permissions")
+    @RequirePermission(PermissionConstants.ROLE_MANAGE)
     public Result<List<String>> getUserPermissions(@RequestHeader("Authorization") String token,
                                                     @PathVariable Long id) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可查看用户权限");
-        }
 
         User user = userService.getById(id);
         if (user == null) {
@@ -452,16 +442,43 @@ public class UserController {
     }
 
     /**
+     * 获取用户权限明细（仅管理员）
+     * <p>
+     * 前端权限管理页用它来区分：角色默认带来了哪些、单独额外授权了哪些。
+     */
+    @GetMapping("/{id}/permissions/detail")
+    @RequirePermission(PermissionConstants.ROLE_MANAGE)
+    public Result<Map<String, Object>> getUserPermissionDetail(@RequestHeader("Authorization") String token,
+                                                                @PathVariable Long id) {
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("userId", user.getId());
+        data.put("role", user.getRole());
+        // 角色默认权限（只读，不能通过自定义授权削减）
+        data.put("rolePermissions", new ArrayList<>(RolePermissions.getPermissions(user.getRole())));
+        // 单独授予的增量权限（可编辑）
+        data.put("customPermissions", RolePermissions.getCustomPermissions(user));
+        // 最终生效
+        data.put("effectivePermissions", RolePermissions.getUserPermissions(user));
+        return Result.ok(data);
+    }
+
+    /**
      * 更新用户自定义权限（仅管理员）
+     * <p>
+     * 语义：提交的 permissions 会被当作**额外授权**，与角色默认权限取并集。
+     * 服务端会自动过滤掉角色已经默认拥有的权限码，只落库真正的增量部分。
+     * 传空数组 = 清除全部额外授权，回到角色默认。
      */
     @PutMapping("/{id}/permissions")
+    @RequirePermission(PermissionConstants.ROLE_MANAGE)
     public Result<Boolean> updateUserPermissions(@RequestHeader("Authorization") String token,
                                                   @PathVariable Long id,
                                                   @RequestBody Map<String, List<String>> body) {
-        String role = jwtUtil.getRoleFromToken(token.replace("Bearer ", ""));
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可修改用户权限");
-        }
 
         User user = userService.getById(id);
         if (user == null) {
@@ -471,8 +488,9 @@ public class UserController {
         List<String> permissions = body.get("permissions");
         userService.updateUserPermissions(id, permissions);
 
-        // 清除该用户 Token 使其重新登录以获取新权限
-        userService.clearUserTokens(id);
+        // 注意：这里不再清除该用户的 Token。
+        // 权限校验统一走 PermissionService（每次请求实时查库），
+        // 因此授权后对方刷新页面即生效，无需强制重新登录。
 
         // 操作日志
         User targetUser = userService.getById(id);

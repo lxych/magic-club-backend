@@ -1,9 +1,12 @@
 package cn.magicclub.controller;
 
 import cn.magicclub.common.JwtUtil;
+import cn.magicclub.common.PermissionConstants;
 import cn.magicclub.common.Result;
 import cn.magicclub.entity.Notification;
 import cn.magicclub.entity.OperationLog;
+import cn.magicclub.security.PermissionService;
+import cn.magicclub.security.RequirePermission;
 import cn.magicclub.service.NotificationService;
 import cn.magicclub.service.OperationLogService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -33,6 +36,7 @@ public class NotificationController {
     private final NotificationService notificationService;
     private final JwtUtil jwtUtil;
     private final OperationLogService operationLogService;
+    private final PermissionService permissionService;
     private final HttpServletRequest request;
 
     /**
@@ -93,10 +97,13 @@ public class NotificationController {
     }
 
     /**
-     * 发送公告（仅管理员）
+     * 发送公告
+     * <p>
+     * 权限：announcement:send（管理员与版主默认拥有）
      * @param ossUrls 可选：前端直传 OSS 后的 URL 列表，绕过文件上传
      */
     @PostMapping("/announce")
+    @RequirePermission(PermissionConstants.ANNOUNCEMENT_SEND)
     public Result<String> announce(@RequestHeader("Authorization") String token,
                                    @RequestParam String title,
                                    @RequestParam String content,
@@ -104,11 +111,6 @@ public class NotificationController {
                                    @RequestParam(required = false) List<String> ossUrls) {
         Long userId = getUserIdFromToken(token);
         if (userId == null) return Result.error(401, "请先登录");
-
-        String role = getRoleFromToken(token);
-        if (!"ADMIN".equals(role)) {
-            return Result.error(403, "仅管理员可发送公告");
-        }
 
         if (title == null || title.trim().isEmpty()) {
             return Result.error("公告标题不能为空");
@@ -135,6 +137,8 @@ public class NotificationController {
 
     /**
      * 撤回公告 - 批量撤回该公告的所有副本
+     * <p>
+     * 管理员或拥有 announcement:recall 权限者可撤回任意公告，其余人仅能撤回自己发送的。
      */
     @PutMapping("/{id}/recall")
     public Result<String> recall(@RequestHeader("Authorization") String token,
@@ -142,10 +146,9 @@ public class NotificationController {
         Long userId = getUserIdFromToken(token);
         if (userId == null) return Result.error(401, "请先登录");
 
-        String role = getRoleFromToken(token);
-        boolean isAdmin = "ADMIN".equals(role);
+        boolean canRecall = permissionService.has(PermissionConstants.ANNOUNCEMENT_RECALL);
 
-        String result = notificationService.recallNotification(id, userId, isAdmin);
+        String result = notificationService.recallNotification(id, userId, canRecall);
         if ("ok".equals(result)) {
             // 操作日志
             saveOperationLog(token, "RECALL_ANNOUNCEMENT",
@@ -184,12 +187,6 @@ public class NotificationController {
         if (token == null) return null;
         if (token.startsWith("Bearer ")) token = token.substring(7);
         return jwtUtil.getUserIdFromToken(token);
-    }
-
-    private String getRoleFromToken(String token) {
-        if (token == null) return null;
-        if (token.startsWith("Bearer ")) token = token.substring(7);
-        return jwtUtil.getRoleFromToken(token);
     }
 
     private void saveOperationLog(String token, String action, String target, String targetId, String detail) {

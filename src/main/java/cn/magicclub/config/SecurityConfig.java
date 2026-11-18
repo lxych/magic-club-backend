@@ -7,8 +7,10 @@ import cn.magicclub.security.JwtAuthenticationFilter;
 import cn.magicclub.service.UserService;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -77,6 +79,22 @@ public class SecurityConfig {
     }
 
     /**
+     * 禁止 JWT 过滤器被 Servlet 容器重复注册
+     * <p>
+     * 只要 Filter 以 Bean 形式存在，Spring Boot 会自动把它注册成全局 Servlet Filter，
+     * 于是同一个过滤器会在「Servlet 层」和「Security 过滤链」各跑一次。后果是未登录/手持过期
+     * Token 的请求在到达 /user/login 之前就被拦下返回 401，表现为「怎么都登不上去」。
+     * 这里显式关闭自动注册，让它只在 Security 过滤链中执行一次。
+     */
+    @Bean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
+            JwtAuthenticationFilter filter) {
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
+    /**
      * CORS配置源（Spring Security层需要显式配置）
      */
     @Bean
@@ -107,14 +125,18 @@ public class SecurityConfig {
             
             // 配置授权规则
             .authorizeHttpRequests(auth -> auth
-                // 公开接口 - 不需要认证
+                // 认证入口、错误页与静态资源 - 不需要认证
                 .requestMatchers("/user/login", "/user/register").permitAll()
-                .requestMatchers("/config/**").permitAll()
-                .requestMatchers("/memorial/**").permitAll()
-                .requestMatchers("/developer/**").permitAll()
-                .requestMatchers("/forum/posts", "/forum/post/**").permitAll()
-                .requestMatchers("/resource/list", "/resource/**").permitAll()
-                .requestMatchers("/uploads/**").permitAll()
+                .requestMatchers("/uploads/**", "/error").permitAll()
+
+                // 只读接口对外开放（GET），写操作一律需要登录
+                .requestMatchers(HttpMethod.GET, "/config/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/memorial/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/developer/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/forum/posts", "/forum/post/**", "/forum/user/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/resource/**").permitAll()
+
+                // 其余请求（含全部 POST/PUT/DELETE）必须携带有效 Token
                 .anyRequest().authenticated()
             )
             

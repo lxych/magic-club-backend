@@ -15,6 +15,7 @@ CREATE TABLE `mc_user` (
     `username` VARCHAR(50) NOT NULL COMMENT '用户名',
     `password` VARCHAR(255) NOT NULL COMMENT '密码(加密)',
     `real_name` VARCHAR(50) COMMENT '真实姓名',
+    `nickname` VARCHAR(32) COMMENT '昵称',
     `gender` TINYINT DEFAULT 0 COMMENT '性别: 0-未知 1-男 2-女',
     `student_no` VARCHAR(20) COMMENT '学号',
     `enrollment_year` INT COMMENT '入学年份',
@@ -29,6 +30,8 @@ CREATE TABLE `mc_user` (
     `role` VARCHAR(20) DEFAULT 'MEMBER' COMMENT '角色: ADMIN-管理员 MEMBER-成员 ALUMNI-校友',
     `status` TINYINT DEFAULT 1 COMMENT '状态: 0-禁用 1-启用',
     `is_graduated` TINYINT DEFAULT 0 COMMENT '是否毕业: 0-否 1-是',
+    `forced_logout` TINYINT DEFAULT 0 COMMENT '是否被强制下线: 0-否 1-是',
+    `permissions` TEXT COMMENT '自定义权限列表(JSON数组)，为空时使用角色默认权限',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted` TINYINT DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
@@ -168,6 +171,26 @@ CREATE TABLE `mc_config` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_config_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
+
+-- ============================================
+-- 操作日志表
+-- ============================================
+DROP TABLE IF EXISTS `mc_operation_log`;
+CREATE TABLE `mc_operation_log` (
+    `id` BIGINT NOT NULL COMMENT '主键（雪花ID）',
+    `user_id` BIGINT DEFAULT NULL COMMENT '操作人ID',
+    `username` VARCHAR(64) DEFAULT NULL COMMENT '操作人用户名',
+    `action` VARCHAR(32) DEFAULT NULL COMMENT '操作类型',
+    `target` VARCHAR(255) DEFAULT NULL COMMENT '操作对象描述',
+    `target_id` VARCHAR(64) DEFAULT NULL COMMENT '操作对象ID',
+    `detail` TEXT DEFAULT NULL COMMENT '详细信息',
+    `ip` VARCHAR(64) DEFAULT NULL COMMENT '操作IP',
+    `create_time` DATETIME DEFAULT NULL COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_action` (`action`),
+    KEY `idx_username` (`username`),
+    KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='操作日志表';
 
 -- ============================================
 -- 插入初始数据

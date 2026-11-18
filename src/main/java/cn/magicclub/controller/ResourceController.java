@@ -1,8 +1,10 @@
 package cn.magicclub.controller;
 
 import cn.magicclub.common.JwtUtil;
+import cn.magicclub.common.PermissionConstants;
 import cn.magicclub.common.Result;
 import cn.magicclub.entity.ResourceFile;
+import cn.magicclub.security.RequirePermission;
 import cn.magicclub.service.ResourceFileService;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -63,23 +65,23 @@ public class ResourceController {
         return Result.ok(resourceFileService.getUserResources(page, userId));
     }
 
-    /** 待审批列表（管理员） */
+    /** 待审批列表（权限：resource:audit） */
     @GetMapping("/pending")
-    public Result<IPage<ResourceFile>> pendingList(@RequestHeader("Authorization") String token,
+    @RequirePermission(PermissionConstants.RESOURCE_AUDIT)
+    public Result<IPage<ResourceFile>> pendingList(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
-        if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
         IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
         return Result.ok(resourceFileService.getResourcesByStatus(page, 0));
     }
 
-    /** 按状态查全部资源（管理员） */
+    /** 按状态查全部资源（权限：resource:audit） */
     @GetMapping("/status/{status}")
-    public Result<IPage<ResourceFile>> listByStatus(@RequestHeader("Authorization") String token,
+    @RequirePermission(PermissionConstants.RESOURCE_AUDIT)
+    public Result<IPage<ResourceFile>> listByStatus(
             @PathVariable Integer status,
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize) {
-        if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
         IPage<ResourceFile> page = new Page<>(pageNum, pageSize);
         return Result.ok(resourceFileService.getResourcesByStatus(page, status));
     }
@@ -117,11 +119,11 @@ public class ResourceController {
         return Result.ok("删除成功", resourceFileService.deleteFile(id, userId));
     }
 
-    /** 审批 */
+    /** 审批（权限：resource:audit） */
     @PostMapping("/{id}/audit")
+    @RequirePermission(PermissionConstants.RESOURCE_AUDIT)
     public Result<Boolean> auditResource(@RequestHeader("Authorization") String token,
             @PathVariable Long id, @RequestParam Integer status) {
-        if (!isAdmin(token)) return Result.error(403, "仅管理员可操作");
         Long auditorId = getUserIdFromToken(token);
         return Result.ok("审核完成", resourceFileService.auditResource(id, status, auditorId, null));
     }
@@ -136,10 +138,5 @@ public class ResourceController {
         if (token == null) return null;
         if (token.startsWith("Bearer ")) token = token.substring(7);
         return jwtUtil.getUserIdFromToken(token);
-    }
-
-    private boolean isAdmin(String token) {
-        if (token == null || !token.startsWith("Bearer ")) return false;
-        return "ADMIN".equals(jwtUtil.getRoleFromToken(token.substring(7)));
     }
 }
