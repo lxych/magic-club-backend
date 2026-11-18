@@ -30,12 +30,6 @@ public interface UserMapper extends BaseMapper<User> {
     User selectByStudentNo(@Param("studentNo") String studentNo);
 
     /**
-     * 根据用户名更新密码
-     */
-    @Update("UPDATE mc_user SET password = #{password} WHERE username = #{username}")
-    void updatePasswordByUsername(@Param("username") String username, @Param("password") String password);
-
-    /**
      * 查询毕业成员列表
      */
     @Select("<script>SELECT * FROM mc_user WHERE is_graduated = 1 AND deleted = 0 " +
