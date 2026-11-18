@@ -196,10 +196,12 @@ CREATE TABLE `mc_operation_log` (
 -- 插入初始数据
 -- ============================================
 
--- 插入管理员账号 (密码: admin123)
+-- 插入管理员账号
+-- 用户名: admin    密码: Admin123456
+-- （密码为 BCrypt 哈希，登录后请立即在「个人中心」修改）
 INSERT INTO `mc_user` (`id`, `username`, `password`, `real_name`, `gender`, `role`, `status`, `create_time`, `update_time`) 
 VALUES 
-(1, 'admin', '{bcrypt}$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5E', '管理员', 1, 'ADMIN', 1, NOW(), NOW());
+(1, 'admin', '$2a$10$Ft5evsNjdR9WyavZTkEYSezj3d7Qvm9bs5IxQ9DataQ2YPDu/KeES', '管理员', 1, 'ADMIN', 1, NOW(), NOW());
 
 -- 插入部门选项
 INSERT INTO `mc_config` (`id`, `config_key`, `config_value`, `description`) VALUES
