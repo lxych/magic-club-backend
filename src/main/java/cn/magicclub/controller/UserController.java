@@ -215,6 +215,34 @@ public class UserController {
     }
 
     /**
+     * 用户详情页聚合接口
+     * <p>
+     * 一次返回：用户信息 + TA 发布的帖子（分页）+ TA 上传的资源（分页）。
+     * 前端「用户详情」页调用，postPage / resourcePage 分别控制两个分页。
+     * <p>
+     * 说明：不返回密码字段；不需要额外权限，登录用户均可查看。
+     */
+    @GetMapping("/{id}/detail")
+    public Result<Map<String, Object>> getUserDetail(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "1") Integer postPage,
+            @RequestParam(defaultValue = "1") Integer resourcePage,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
+
+        User user = userService.getById(id);
+        if (user == null) {
+            return Result.error("用户不存在");
+        }
+        user.setPassword(null);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("user", user);
+        data.put("posts", postService.getUserPosts(new Page<>(postPage, pageSize), id));
+        data.put("resources", resourceFileService.getUserResources(new Page<>(resourcePage, pageSize), id));
+        return Result.ok(data);
+    }
+
+    /**
      * 上传头像
      */
     @PostMapping("/upload-avatar")
