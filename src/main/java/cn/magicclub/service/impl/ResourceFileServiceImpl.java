@@ -1,9 +1,12 @@
 package cn.magicclub.service.impl;
 
+import cn.magicclub.common.PermissionConstants;
 import cn.magicclub.entity.ResourceFile;
 import cn.magicclub.entity.User;
 import cn.magicclub.mapper.ResourceFileMapper;
 import cn.magicclub.mapper.UserMapper;
+import cn.magicclub.security.PermissionDeniedException;
+import cn.magicclub.security.PermissionService;
 import cn.magicclub.service.OssService;
 import cn.magicclub.service.ResourceFileService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -48,6 +51,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     private final ResourceFileMapper resourceFileMapper;
     private final UserMapper userMapper;
     private final OssService ossService;
+    private final PermissionService permissionService;
 
     @Value("${file.upload.path}")
     private String uploadPath;
@@ -204,12 +208,38 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         return resultPage;
     }
 
+    /**
+     * 资源可见性校验
+     * <p>
+     * 规则：只有「审核通过」(status=1) 的资源对所有人可见；
+     * 待审核(0)、已驳回(2) 的资源仅上传者本人和拥有 resource:audit 权限的人可见。
+     * <p>
+     * 列表接口已经用 status=1 过滤，但详情/下载/预览是按 ID 访问的，
+     * 不在这里拦就会绕开审核直接看文件。
+     */
+    private void assertViewable(ResourceFile resourceFile) {
+        if (Integer.valueOf(1).equals(resourceFile.getStatus())) {
+            return;
+        }
+
+        User current = permissionService.currentUser();
+        boolean isOwner = current != null && current.getId().equals(resourceFile.getUserId());
+        boolean isAuditor = permissionService.has(PermissionConstants.RESOURCE_AUDIT);
+
+        if (!isOwner && !isAuditor) {
+            throw new PermissionDeniedException("resource:audit", "该资源尚未通过审核，暂不可查看");
+        }
+    }
+
     @Override
     public ResourceFile getResourceDetail(Long fileId) {
         ResourceFile resourceFile = resourceFileMapper.selectById(fileId);
         if (resourceFile == null || resourceFile.getDeleted() == 1) {
             throw new RuntimeException("文件不存在");
         }
+
+        // 审批前不可查看（本人和审核员除外）
+        assertViewable(resourceFile);
 
         // 填充上传者信息
         User user = userMapper.selectById(resourceFile.getUserId());
@@ -232,6 +262,9 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         if (resourceFile == null || resourceFile.getDeleted() == 1) {
             throw new RuntimeException("文件不存在");
         }
+
+        // 审批前不可下载（本人和审核员除外）
+        assertViewable(resourceFile);
 
         // 检查是否允许下载
         if (resourceFile.getAllowDownload() != null && resourceFile.getAllowDownload() == 0) {
@@ -362,6 +395,9 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         if (resourceFile == null || resourceFile.getDeleted() == 1) {
             throw new RuntimeException("文件不存在");
         }
+
+        // 审批前不可预览（本人和审核员除外）
+        assertViewable(resourceFile);
 
         // OSS 文件：重定向到签名预览链接
         if (isOssFile(resourceFile.getFileUrl())) {
