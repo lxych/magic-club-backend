@@ -64,6 +64,21 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             "zip", "rar"
     );
 
+    /**
+     * 「附件类」分类：论坛插图、纪念墙图片、头像、通知附件等
+     * <p>
+     * 这类文件复用 mc_resource 存储，但**不是资源**：
+     * - 不出现在「资源中心」列表
+     * - 不进「资源审批」队列（免审，上传即用）
+     */
+    private static final Set<String> ATTACHMENT_CATEGORIES =
+            Set.of("FORUM", "memorial", "AVATAR", "ATTACHMENT", "NOTIFICATION");
+
+    /** 是否为附件类（而非真正的资源） */
+    private boolean isAttachment(String category) {
+        return category != null && ATTACHMENT_CATEGORIES.contains(category);
+    }
+
     @Override
     @Transactional
     public ResourceFile uploadFile(MultipartFile file, Long userId, String description, String category, Integer allowDownload) {
@@ -128,8 +143,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         resourceFile.setUserId(userId);
         resourceFile.setDownloadCount(0);
         resourceFile.setCategory(category);
-        resourceFile.setIsPublic(1);
-        resourceFile.setStatus(0); // 默认待审批
+
+        // 附件类（论坛图片、纪念墙图片等）：不公开、免审核，不进资源中心也不进审批队列
+        // 真正的资源：公开 + 待审核
+        boolean attachment = isAttachment(category);
+        resourceFile.setIsPublic(attachment ? 0 : 1);
+        resourceFile.setStatus(attachment ? 1 : 0);
         resourceFile.setAllowDownload(allowDownload != null ? allowDownload : 1);
 
         resourceFileMapper.insert(resourceFile);
@@ -178,8 +197,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         wrapper.eq(ResourceFile::getStatus, 1);
         wrapper.eq(ResourceFile::getIsPublic, 1);
         wrapper.eq(ResourceFile::getDeleted, 0);
-        wrapper.ne(ResourceFile::getCategory, "FORUM"); // 论坛图片不展示在资源中心
-    wrapper.ne(ResourceFile::getCategory, "memorial"); // 纪念墙图片不展示在资源中心
+        // 附件类（论坛图片、纪念墙图片等）不属于资源，不进资源中心
+        wrapper.notIn(ResourceFile::getCategory, ATTACHMENT_CATEGORIES);
 
         // 分类筛选
         if (StringUtils.hasText(category)) {
@@ -318,7 +337,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ResourceFile::getUserId, userId);
         wrapper.eq(ResourceFile::getDeleted, 0);
-        wrapper.ne(ResourceFile::getCategory, "FORUM");
+        wrapper.notIn(ResourceFile::getCategory, ATTACHMENT_CATEGORIES);
         wrapper.orderByDesc(ResourceFile::getCreateTime);
 
         return resourceFileMapper.selectPage(page, wrapper);
@@ -439,8 +458,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ResourceFile::getStatus, status);
         wrapper.eq(ResourceFile::getDeleted, 0);
-        wrapper.ne(ResourceFile::getCategory, "FORUM");
-        wrapper.ne(ResourceFile::getCategory, "memorial");
+        wrapper.notIn(ResourceFile::getCategory, ATTACHMENT_CATEGORIES);
+
         wrapper.orderByDesc(ResourceFile::getCreateTime);
         IPage<ResourceFile> result = resourceFileMapper.selectPage(page, wrapper);
         fillResourceRelatedData(result.getRecords());
@@ -452,8 +471,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
         LambdaQueryWrapper<ResourceFile> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ResourceFile::getStatus, 0);
         wrapper.eq(ResourceFile::getDeleted, 0);
-        wrapper.ne(ResourceFile::getCategory, "FORUM");
-        wrapper.ne(ResourceFile::getCategory, "memorial");
+        wrapper.notIn(ResourceFile::getCategory, ATTACHMENT_CATEGORIES);
+
         wrapper.orderByDesc(ResourceFile::getCreateTime);
         IPage<ResourceFile> result = resourceFileMapper.selectPage(page, wrapper);
         fillResourceRelatedData(result.getRecords());

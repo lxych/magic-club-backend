@@ -92,7 +92,8 @@ public class ResourceController {
                                                         @RequestParam("file") MultipartFile file) {
         Long userId = getUserIdFromToken(token);
         if (userId == null) return Result.error(401, "请先登录");
-        ResourceFile rf = resourceFileService.uploadFile(file, userId, "论坛图片", "GENERAL", 0);
+        // 分类必须是 FORUM（附件类），否则会被当成资源混进资源中心
+        ResourceFile rf = resourceFileService.uploadFile(file, userId, "论坛图片", "FORUM", 0);
         Map<String,String> map = new HashMap<>();
         map.put("fileUrl", rf.getFileUrl());
         return Result.ok("上传成功", map);
